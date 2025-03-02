@@ -67,14 +67,4 @@ To explore the theoretical foundations of motor control and motor learning, chec
 
 ---
 
-## Feedback & Community
-We welcome your feedback, ideas, and contributions. Feel free to:
-- Submit pull requests with improvements or additional examples.
-- Open an issue to ask questions or suggest changes.
-- Start a discussion to share your own project adaptations.
-
-> “A community-driven approach ensures that the kits are constantly evolving to meet the needs of both learners and industry.”
-
----
-
 **Happy experimenting, and welcome to the evolving world of at-home motor control education!**
