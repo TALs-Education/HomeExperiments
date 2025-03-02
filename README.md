@@ -23,11 +23,11 @@ Recent educational workshops and research emphasize the value of home experiment
 ## Getting Started
 
 1. **Hardware Components**
-   - Arduino board (e.g., Arduino Uno)
+   - Arduino board - Arduino Uno
    - DC motor and motor driver
    - Potentiometer
    - Distance sensor (VL53L4CD)
-   - Encoder (optional, recommended for advanced control experiments)
+   - Encoder
 
 2. **Software Setup**
    - [Arduino IDE](https://www.arduino.cc/en/Main/Software)  
