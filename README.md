@@ -44,8 +44,7 @@ Recent educational workshops and research emphasize the value of home experiment
 
 ### Hybrid Learning Through Home Experiment Kits
 Evidence from the workshop implementations at Tel Aviv University’s Autonomous Systems Lab shows that a *hybrid* model—combining online theory with at-home practical work—helps students internalize complex engineering concepts. Students can learn at their own pace and see theory come to life by conducting hands-on experiments wherever they are.
-
-> “These kits serve as a bridge between theoretical concepts and practical application, offering a flexible learning environment that accommodates individual student needs.”
+These kits serve as a bridge between theoretical concepts and practical application, offering a flexible learning environment that accommodates individual student needs.
 
 ### Open-Source Collaboration
 Adopting open-source principles drives ongoing improvements. A global community of instructors and learners can adapt these kits for their specific needs, add new documentation, or incorporate additional sensors. This lowers the barrier to entry while encouraging continuous innovation.
