@@ -34,7 +34,7 @@ Recent educational workshops and research emphasize the value of home experiment
    - (Optional) MATLAB/Simulink for model-based design and simulation.
 
 3. **Basic Experiment Flow**
-   - Assemble hardware following the [Experiment Manual](https://docs.google.com/document/d/e/2PACX-1vTPUhsmN9pzYHgXOWRKwX2BtyRtxThCYWmVOfnkxVCWbyEGNXG4-kLLJMpkjMgp8psmi3ngpcFQB8Ji/pub).
+   - Review hardware following the [Experiment Manual](https://docs.google.com/document/d/e/2PACX-1vTPUhsmN9pzYHgXOWRKwX2BtyRtxThCYWmVOfnkxVCWbyEGNXG4-kLLJMpkjMgp8psmi3ngpcFQB8Ji/pub).
    - Run your first motor control sketch in the Arduino IDE.
    - (Optional) Explore Simulink models to simulate your motor control algorithm, then upload it to the Arduino board for real-world testing.
 
