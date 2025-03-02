@@ -62,7 +62,7 @@ For a detailed setup guide and step-by-step procedures, refer to the
 
 ### Literature Review
 To explore the theoretical foundations of motor control and motor learning, check out the  
-[Literature Review](https://docs.google.com/document/d/1QbtmdrFBOkH7k_BocmlgdmgrB1uC7Cmu6fzY5HIIA1Y/edit?tab=t.0#heading=h.hul62mwjj4yd).
+[Literature Review](https://docs.google.com/document/d/e/2PACX-1vTqOHc4G_ie2W3nKhfkatiZXvrX4eGqzWa4LNLAUDhguo_w-ZCA4QN4Am4NJfcorTGWt-4-RwCno_Bl/pub).
 
 ---
 
