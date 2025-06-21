@@ -20,10 +20,13 @@
 %
 %==========================================================================
 
+clc
+clear
+
 %% 1.  USER PARAMETERS  (all values in SI units)
 Tamb  = 25;      % Ambient temperature  [°C]  (reference for ΔT)
 C_L   = 28.8;    % Thermal capacitance, local node (heater+heatsink) [J/K]
-C_R   = 0.85;    % Thermal capacitance, remote copper pad           [J/K]
+C_R   = 0.85;    % Thermal capacitance, remote copper pad            [J/K]
 R_h   = 32;      % Thermal resistance, heatsink → ambient            [K/W]
 R_cond= 71;      % Thermal resistance, copper trace (L ↔ R)          [K/W]
 R_conv= 173;     % Thermal resistance, remote pad → ambient          [K/W]
@@ -65,21 +68,26 @@ D = zeros(2,1);
 %% 3.  BUILD THE STATE-SPACE OBJECT
 plant = ss(A,B,C,D);
 
-%% 4. Step simulation
-Pstep = 1;          % [W]
-t_end = 2500;       % [s]
-% Simulate:
-[y,t] = step(Pstep*plant,t_end);
+%% 4.  Step simulation  — with 10-s delay and 1-s sampling
+Pstep    = 1;      % [W]
+t_end    = 2500;   % [s]
+t        = (0:1:t_end)';          % 1-second grid  (column vector)
 
-% y columns: 1 = ΔT_L, 2 = ΔT_R.  Convert to absolute °C:
+% Build delayed input:  0 W for t<10 s, then 1 W
+u        = zeros(size(t));
+u(t >= 10) = Pstep;
+
+% Simulate continuous-time plant on the same grid
+y = lsim(plant, u, t);            % y(:,1)=ΔT_L, y(:,2)=ΔT_R
+
+% Convert to absolute temperature (°C)
 T_L = Tamb + y(:,1);
 T_R = Tamb + y(:,2);
 
 %% 5.  Save data 
-T = table(t,T_L,T_R,'VariableNames',{'t_s','T_local_C','T_remote_C'});
-
+T = table(t, u, T_L, T_R,'VariableNames', {'t_s', 'Power_W', 'T_local_C', 'T_remote_C'});
 writetable(T,'pcb_step_response.csv');
-save('pcb_step_response.mat','T','plant','Tamb');
+save('pcb_step_response.mat', 'T', 'plant', 'Tamb', 'u');
 
 %% 6.  Plot quick look
 figure, plot(t,T_L,'LineWidth',1.3), hold on
