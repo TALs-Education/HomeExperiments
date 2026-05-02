@@ -1,0 +1,14 @@
+lets design the following experiment using an heating element on a pcb with 2 oz inch 2 layer. we will create a  16.5mm on 17.5 mm heating zone using 10 resistors of 27ohm at 5v source controlled by a mosfet and measured by temperature sensor the resistors are set as 2 in series and 5 pairs in parallel. we add a heatsink on top of the resistors of 32.00°C/W the size of 14 on 14 mm with 6mm heigh. made from aluminum.
+we will add a trace of 5mm width to another remote element of the same size with a temperature sensor without a heatsink at 20mm distance from the pads edges. 
+we will add an optional fan to cool everything at 10cfm.
+
+calculate the max wattage for the network supplying 5v.
+simulate a step response of the heaters at 1W plot the temperature response of the two sensors.
+calculate the transfer function for each of the systems as seen by the temperature sensors.
+
+Electronic Setup:
+Arduino uno r4 minima 
+AO3400A mosfet to switch the resistors on pin D9
+MCP9701AT temperature sensors. ambient temperature on pin A0, Heater side on A1 and remote pad on A2
+Optional fan on D11 for PWM control and D2 for tacho feedback.
+Status led pin on D10
