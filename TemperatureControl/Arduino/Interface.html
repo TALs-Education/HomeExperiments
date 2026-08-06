@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Arduino Heater Controller</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 8px;
+      background: #f0f3f6;
+      color: #222;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      gap: 8px;
+    }
+
+    h1 { margin: 0; font-size: 18px; white-space: nowrap; }
+    h2 { margin: 0 0 8px 0; font-size: 14px; color: #444; }
+
+    .top-bar {
+      background: white;
+      border-radius: 8px;
+      padding: 8px 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .status {
+      font-family: monospace;
+      font-size: 12px;
+      color: #0c0;
+      background: #111;
+      padding: 4px 8px;
+      border-radius: 4px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .main {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 270px;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+
+    .panel {
+      background: white;
+      border-radius: 8px;
+      padding: 10px 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 5px 0;
+    }
+
+    label {
+      width: 55px;
+      font-weight: bold;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    input[type="range"] { flex: 1; }
+
+    input[type="number"] {
+      width: 52px;
+      padding: 2px 4px;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    button {
+      padding: 5px 11px;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 5px;
+      border: 1px solid #999;
+      background: #fff;
+      white-space: nowrap;
+    }
+
+    button.primary { background: #1f6feb; color: white; border-color: #1f6feb; }
+    button.danger  { background: #d1242f; color: white; border-color: #d1242f; }
+    button.success { background: #2da44e; color: white; border-color: #2da44e; }
+
+    .values {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .valueBox {
+      background: #f0f3f6;
+      padding: 6px 8px;
+      border-radius: 6px;
+    }
+
+    .valueBox .name  { font-size: 11px; color: #666; }
+    .valueBox .value { font-size: 18px; font-weight: bold; }
+
+    .btn-row  { display: flex; gap: 6px; }
+    .log-info { font-size: 12px; color: #666; margin-top: 6px; }
+
+    .chart-panel {
+      flex: 1;
+      background: white;
+      border-radius: 8px;
+      padding: 10px 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="top-bar">
+    <h1>Arduino Heater Controller</h1>
+    <div class="status" id="status">Not connected</div>
+    <button class="primary" id="connectBtn">Connect</button>
+    <button id="disconnectBtn">Disconnect</button>
+    <button class="danger" id="allOffBtn">All Off</button>
+  </div>
+
+  <div class="main">
+    <div class="sidebar">
+
+      <div class="panel">
+        <h2>Controls</h2>
+        <div class="row">
+          <label for="heaterSlider">Heater 1</label>
+          <input type="range" id="heaterSlider" min="0" max="100" step="1" value="0">
+          <input type="number" id="heaterNumber" min="0" max="100" step="1" value="0">
+          <span>%</span>
+        </div>
+        <div class="row">
+          <label for="heater2Slider">Heater 2</label>
+          <input type="range" id="heater2Slider" min="0" max="100" step="1" value="0">
+          <input type="number" id="heater2Number" min="0" max="100" step="1" value="0">
+          <span>%</span>
+        </div>
+        <div class="row">
+          <label for="fanSlider">Fan</label>
+          <input type="range" id="fanSlider" min="0" max="100" step="1" value="0">
+          <input type="number" id="fanNumber" min="0" max="100" step="1" value="0">
+          <span>%</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Live Values</h2>
+        <div class="values">
+          <div class="valueBox">
+            <div class="name">Ambient</div>
+            <div class="value"><span id="ambientVal">--</span> °C</div>
+          </div>
+          <div class="valueBox">
+            <div class="name">Fan</div>
+            <div class="value"><span id="rpmVal">--</span> RPM</div>
+          </div>
+          <div class="valueBox">
+            <div class="name">Beam 1</div>
+            <div class="value"><span id="beam1Val">--</span> °C</div>
+          </div>
+          <div class="valueBox">
+            <div class="name">Beam 2</div>
+            <div class="value"><span id="beam2Val">--</span> °C</div>
+          </div>
+          <div class="valueBox">
+            <div class="name">Beam 3</div>
+            <div class="value"><span id="beam3Val">--</span> °C</div>
+          </div>
+          <div class="valueBox">
+            <div class="name">Beam 4</div>
+            <div class="value"><span id="beam4Val">--</span> °C</div>
+          </div>
+          <div class="valueBox">
+            <div class="name">Beam 5</div>
+            <div class="value"><span id="beam5Val">--</span> °C</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Data Log</h2>
+        <div class="btn-row">
+          <button class="success" id="downloadLogBtn">Download Log</button>
+          <button id="clearLogBtn">Clear</button>
+        </div>
+        <div class="log-info" id="logInfo">0 entries recorded</div>
+      </div>
+
+    </div>
+
+    <div class="chart-panel">
+      <h2>Temperature — Last 100 Seconds</h2>
+      <div class="canvas-container" id="canvasContainer">
+        <canvas id="plotCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let port = null;
+    let reader = null;
+    let writer = null;
+    let keepReading = false;
+
+    const BAUD_RATE = 115200;
+    const WINDOW_SECONDS = 100;
+
+    const samples = [];
+    const logEntries = [];
+
+    const statusEl  = document.getElementById("status");
+    const logInfoEl = document.getElementById("logInfo");
+
+    const canvas = document.getElementById("plotCanvas");
+    const ctx    = canvas.getContext("2d");
+
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        canvas.width  = Math.max(1, Math.round(width));
+        canvas.height = Math.max(1, Math.round(height));
+        drawPlot();
+      }
+    });
+    ro.observe(document.getElementById("canvasContainer"));
+
+    const controls = {
+      heater:  { slider: document.getElementById("heaterSlider"),  number: document.getElementById("heaterNumber")  },
+      heater2: { slider: document.getElementById("heater2Slider"), number: document.getElementById("heater2Number") },
+      fan:     { slider: document.getElementById("fanSlider"),     number: document.getElementById("fanNumber")     }
+    };
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    function clampPercent(x) {
+      x = Number(x);
+      if (!Number.isFinite(x)) return 0;
+      return Math.max(0, Math.min(100, x));
+    }
+
+    async function sendJson(obj) {
+      if (!writer) { setStatus("Not connected"); return; }
+      await writer.write(new TextEncoder().encode(JSON.stringify(obj) + "\n"));
+    }
+
+    function setupControl(name) {
+      const { slider, number } = controls[name];
+      function updateFromValue(value) {
+        value = clampPercent(value);
+        slider.value = value;
+        number.value = value;
+        sendJson({ [name]: value });
+      }
+      slider.addEventListener("input",  () => updateFromValue(slider.value));
+      number.addEventListener("change", () => updateFromValue(number.value));
+    }
+
+    setupControl("heater");
+    setupControl("heater2");
+    setupControl("fan");
+
+    document.getElementById("allOffBtn").addEventListener("click", async () => {
+      for (const name of ["heater", "heater2", "fan"]) {
+        controls[name].slider.value = 0;
+        controls[name].number.value = 0;
+      }
+      await sendJson({ alloff: 1 });
+    });
+
+    document.getElementById("connectBtn").addEventListener("click",    connectSerial);
+    document.getElementById("disconnectBtn").addEventListener("click", disconnectSerial);
+
+    document.getElementById("downloadLogBtn").addEventListener("click", () => {
+      if (logEntries.length === 0) { alert("No data logged yet."); return; }
+
+      const header = "t_ms,t_sec,ambient_c,beam1_c,beam2_c,beam3_c,beam4_c,beam5_c,fan_rpm,heater1_pwm,heater2_pwm,fan_pwm\n";
+      const rows = logEntries.map(e =>
+        `${e.t_ms},${e.t_sec},${e.ambient_c},${e.beam1_c},${e.beam2_c},${e.beam3_c},${e.beam4_c},${e.beam5_c},${e.fan_rpm},${e.heater1_pwm},${e.heater2_pwm},${e.fan_pwm}`
+      ).join("\n");
+
+      const blob = new Blob([header + rows], { type: "text/plain" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = "heater_log_" + new Date().toISOString().replace(/[:.]/g, "-") + ".txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("clearLogBtn").addEventListener("click", () => {
+      logEntries.length = 0;
+      logInfoEl.textContent = "0 entries recorded";
+    });
+
+    async function connectSerial() {
+      if (!("serial" in navigator)) {
+        setStatus("Web Serial not supported — use Chrome or Edge.");
+        return;
+      }
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: BAUD_RATE });
+        writer = port.writable.getWriter();
+        keepReading = true;
+        readLoop();
+        setStatus("Connected at " + BAUD_RATE + " baud");
+      } catch (err) {
+        setStatus("Connection failed: " + err.message);
+      }
+    }
+
+    async function disconnectSerial() {
+      keepReading = false;
+      try {
+        if (reader) { await reader.cancel(); reader.releaseLock(); reader = null; }
+        if (writer) { writer.releaseLock(); writer = null; }
+        if (port)   { await port.close(); port = null; }
+        setStatus("Disconnected");
+      } catch (err) {
+        setStatus("Disconnect error: " + err.message);
+      }
+    }
+
+    async function readLoop() {
+      const textDecoder = new TextDecoderStream();
+      port.readable.pipeTo(textDecoder.writable);
+      reader = textDecoder.readable.getReader();
+      let buffer = "";
+      try {
+        while (keepReading) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            buffer += value;
+            const lines = buffer.split("\n");
+            buffer = lines.pop();
+            for (const line of lines) handleSerialLine(line.trim());
+          }
+        }
+      } catch (err) {
+        setStatus("Read error: " + err.message);
+      } finally {
+        try { reader.releaseLock(); } catch {}
+      }
+    }
+
+    function handleSerialLine(line) {
+      if (!line) return;
+      try {
+        const data = JSON.parse(line);
+        if (
+          typeof data.ambient_c === "number" &&
+          typeof data.beam1_c   === "number" &&
+          typeof data.beam5_c   === "number"
+        ) {
+          addSample(data);
+          updateLiveValues(data);
+          drawPlot();
+        }
+      } catch { /* ignore non-JSON */ }
+    }
+
+    function addSample(data) {
+      const nowSec = data.t_ms / 1000;
+
+      samples.push({
+        t: nowSec,
+        ambient: data.ambient_c,
+        beam1: data.beam1_c,
+        beam2: data.beam2_c,
+        beam3: data.beam3_c,
+        beam4: data.beam4_c,
+        beam5: data.beam5_c,
+        rpm:        data.fan_rpm,
+        heater1Pwm: data.heater1_pwm,
+        heater2Pwm: data.heater2_pwm,
+        fanPwm:     data.fan_pwm
+      });
+
+      const cutoff = nowSec - WINDOW_SECONDS;
+      while (samples.length > 0 && samples[0].t < cutoff) samples.shift();
+
+      logEntries.push({
+        t_ms:        data.t_ms         ?? "",
+        t_sec:       nowSec.toFixed(3),
+        ambient_c:   data.ambient_c,
+        beam1_c:     data.beam1_c,
+        beam2_c:     data.beam2_c,
+        beam3_c:     data.beam3_c,
+        beam4_c:     data.beam4_c,
+        beam5_c:     data.beam5_c,
+        fan_rpm:     data.fan_rpm     ?? "",
+        heater1_pwm: data.heater1_pwm ?? "",
+        heater2_pwm: data.heater2_pwm ?? "",
+        fan_pwm:     data.fan_pwm     ?? ""
+      });
+
+      logInfoEl.textContent = logEntries.length + " entries recorded";
+    }
+
+    function updateLiveValues(data) {
+      document.getElementById("ambientVal").textContent = data.ambient_c.toFixed(2);
+      document.getElementById("beam1Val").textContent   = data.beam1_c.toFixed(2);
+      document.getElementById("beam2Val").textContent   = data.beam2_c.toFixed(2);
+      document.getElementById("beam3Val").textContent   = data.beam3_c.toFixed(2);
+      document.getElementById("beam4Val").textContent   = data.beam4_c.toFixed(2);
+      document.getElementById("beam5Val").textContent   = data.beam5_c.toFixed(2);
+      document.getElementById("rpmVal").textContent     = Number(data.fan_rpm).toFixed(0);
+    }
+
+    function drawPlot() {
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+
+      if (samples.length < 2) {
+        drawAxes(20, 120);
+        return;
+      }
+
+      const latestT = samples[samples.length - 1].t;
+      const startT  = latestT - WINDOW_SECONDS;
+
+      let minTemp = 20;
+      let maxTemp = 120;
+
+      for (const s of samples) {
+        minTemp = Math.min(minTemp, s.ambient, s.beam1, s.beam2, s.beam3, s.beam4, s.beam5);
+        maxTemp = Math.max(maxTemp, s.ambient, s.beam1, s.beam2, s.beam3, s.beam4, s.beam5);
+      }
+
+      minTemp = Math.floor((minTemp - 5) / 10) * 10;
+      maxTemp = Math.ceil((maxTemp + 5) / 10) * 10;
+
+      drawAxes(minTemp, maxTemp);
+      drawSeries(startT, latestT, minTemp, maxTemp, "ambient", "#1f77b4");
+      drawSeries(startT, latestT, minTemp, maxTemp, "beam1",   "#d62728");
+      drawSeries(startT, latestT, minTemp, maxTemp, "beam2",   "#ff7f0e");
+      drawSeries(startT, latestT, minTemp, maxTemp, "beam3",   "#2ca02c");
+      drawSeries(startT, latestT, minTemp, maxTemp, "beam4",   "#9467bd");
+      drawSeries(startT, latestT, minTemp, maxTemp, "beam5",   "#8c564b");
+      drawLegend();
+    }
+
+    function xMap(t, startT, endT) {
+      const left  = 48;
+      const right = canvas.width - 10;
+      return left + (t - startT) * (right - left) / (endT - startT);
+    }
+
+    function yMap(temp, minTemp, maxTemp) {
+      const top    = 16;
+      const bottom = canvas.height - 32;
+      return bottom - (temp - minTemp) * (bottom - top) / (maxTemp - minTemp);
+    }
+
+    function drawAxes(minTemp, maxTemp) {
+      const w      = canvas.width;
+      const h      = canvas.height;
+      const left   = 48;
+      const right  = w - 10;
+      const top    = 16;
+      const bottom = h - 32;
+      const fs     = Math.max(10, Math.min(13, Math.round(h / 32)));
+
+      ctx.font      = fs + "px Arial";
+      ctx.fillStyle = "#333";
+
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(left, top);
+      ctx.lineTo(left, bottom);
+      ctx.lineTo(right, bottom);
+      ctx.stroke();
+
+      for (let temp = minTemp; temp <= maxTemp; temp += 10) {
+        const y = yMap(temp, minTemp, maxTemp);
+        ctx.strokeStyle = "#e8e8e8";
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(right, y);
+        ctx.stroke();
+        ctx.fillStyle = "#333";
+        ctx.fillText(temp + "°", 2, y + 4);
+      }
+
+      for (let sec = 0; sec <= WINDOW_SECONDS; sec += 20) {
+        const x = left + sec * (right - left) / WINDOW_SECONDS;
+        ctx.strokeStyle = "#e8e8e8";
+        ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+        ctx.stroke();
+        ctx.fillStyle = "#333";
+        ctx.fillText("-" + (WINDOW_SECONDS - sec) + "s", x - 12, bottom + fs + 4);
+      }
+    }
+
+    function drawSeries(startT, endT, minTemp, maxTemp, key, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      let started = false;
+      for (const s of samples) {
+        if (s.t < startT) continue;
+        const x = xMap(s.t, startT, endT);
+        const y = yMap(s[key], minTemp, maxTemp);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    function drawLegend() {
+      const items = [
+        { label: "Ambient", color: "#1f77b4" },
+        { label: "Beam1",   color: "#d62728" },
+        { label: "Beam2",   color: "#ff7f0e" },
+        { label: "Beam3",   color: "#2ca02c" },
+        { label: "Beam4",   color: "#9467bd" },
+        { label: "Beam5",   color: "#8c564b" }
+      ];
+      const fs = Math.max(10, Math.min(13, Math.round(canvas.height / 32)));
+      ctx.font = fs + "px Arial";
+      let x = 56;
+      const y = 14;
+      for (const item of items) {
+        ctx.fillStyle = item.color;
+        ctx.fillRect(x, y - 7, 16, 4);
+        ctx.fillStyle = "#333";
+        ctx.fillText(item.label, x + 20, y - 1);
+        x += 70;
+      }
+    }
+
+    drawPlot();
+  </script>
+</body>
+</html>
