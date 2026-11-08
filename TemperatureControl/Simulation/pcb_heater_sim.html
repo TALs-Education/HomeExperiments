@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heated PCB Beam</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --ink: #1d2330; --muted: #6a7282; --line: #dfe2e8;
+  --accent: #d9480f; --accent-ink: #fff; --plot-bg: #ffffff; --grid: #eceef2; --board-bg: #e9ebef;
+  --ok: #2b8a3e; --warn: #e67700; --bad: #c92a2a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1b1f27; --ink: #e6e8ec; --muted: #9098a8; --line: #2c323d;
+    --accent: #ff7a3d; --accent-ink: #111; --plot-bg: #161a21; --grid: #262b35; --board-bg: #22272f;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1b1f27; --ink: #e6e8ec; --muted: #9098a8; --line: #2c323d;
+  --accent: #ff7a3d; --accent-ink: #111; --plot-bg: #161a21; --grid: #262b35; --board-bg: #22272f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 14px 20px 10px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+header h1 { font-size: 18px; margin: 0; }
+header .sub { color: var(--muted); }
+.layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 14px; padding: 0 16px 16px; }
+@media (max-width: 1050px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+aside .card + .card { margin-top: 10px; }
+main > * + * { margin-top: 12px; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.row label { flex: 0 0 118px; color: var(--muted); }
+.row input[type=number], .row select { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); font: inherit; }
+.row input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.row output { flex: 0 0 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { flex: 1; border: 0; background: transparent; color: var(--ink); padding: 6px 4px; font: inherit; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+button.b { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
+button.b.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.b:disabled { opacity: .45; cursor: default; }
+.kv { display: grid; grid-template-columns: auto auto; gap: 2px 10px; font-variant-numeric: tabular-nums; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.kv span:nth-child(even) { text-align: right; }
+details summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+details[open] summary { margin-bottom: 6px; }
+.note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+canvas { display: block; width: 100%; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; position: relative; overflow: hidden; }
+.tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c, var(--line)); }
+.tile .n { color: var(--muted); font-size: 12px; }
+.tile .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; min-height: 16px; }
+.status { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 99px; font-size: 12px; border: 1px solid var(--line); }
+.status.fault { background: var(--bad); color: #fff; border-color: var(--bad); }
+.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.chart-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+table.geo { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+table.geo td { padding: 2px 0; border-bottom: 1px solid var(--line); }
+table.geo td:last-child { text-align: right; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Heated PCB Beam: Thermal Simulation</h1>
+  <span class="sub">2D finite-difference model built from the heater PCB gerbers (V01 dual, V02 single)</span>
+  <span id="faultBadge" class="status"><span class="dot"></span><span id="faultText">OK</span></span>
+</header>
+
+<div class="layout">
+<aside>
+  <div class="card">
+    <h2>Setup</h2>
+    <div class="seg" id="boardSeg">
+      <button data-v="single" class="on">Single heater (V02)</button>
+      <button data-v="dual">Dual heater (V01)</button>
+    </div>
+    <div class="row"><label for="rRes">Resistor (each)</label><input id="rRes" type="number" step="0.5" min="1" value="10"><span>Ω</span></div>
+    <div class="row"><label for="vSup">Supply</label><input id="vSup" type="number" step="0.1" min="0" value="5.0"><span>V</span></div>
+    <div class="row"><label for="rSer">FET + wiring / heater</label><input id="rSer" type="number" step="0.05" min="0" value="0.25"><span>Ω</span></div>
+    <div class="row"><label for="rSrc">Supply source (shared)</label><input id="rSrc" type="number" step="0.1" min="0" value="1.0"><span>Ω</span></div>
+    <div class="row"><label for="iFan">Fan current @100%</label><input id="iFan" type="number" step="0.01" min="0" value="0.20"><span>A</span></div>
+    <div class="kv" id="elecKV"></div>
+    <p class="note">Each heater is 2 × 2512 resistors in series on the bottom side, switched by an AO3400A: Bourns CRM2512-FX-10R0ELF (10 Ω, 2 W) on the single board, Stackpole RMCF2512FT15R0 (15 Ω, 1 W) on the dual board. Loss resistances are fitted to the logged runs. The shared source resistance (USB cable, NANOSMDC075F-2 PTC fuse, Uno R4 input path) makes the supply sag when both heaters or the fan draw current. The 40 mm fan draws about 200 mA at full speed; the logged runs had the fan off.</p>
+  </div>
+
+  <div class="card">
+    <h2>Drive</h2>
+    <div class="seg" id="modeSeg">
+      <button data-v="manual" class="on">Manual</button>
+      <button data-v="pid">PID</button>
+      <button data-v="replay">Replay log</button>
+    </div>
+    <div id="manualBox">
+      <div class="row"><label for="d1">Heater 1 PWM</label><input id="d1" type="range" min="0" max="100" value="100"><output id="d1o">100%</output></div>
+      <div class="row h2only"><label for="d2">Heater 2 PWM</label><input id="d2" type="range" min="0" max="100" value="0"><output id="d2o">0%</output></div>
+    </div>
+    <div id="pidBox" class="hidden">
+      <div class="pidLoop" data-loop="0">
+        <div class="row"><label>Loop 1 → Heater 1</label><select class="pSensor"></select></div>
+        <div class="row"><label>Setpoint</label><input class="pSp" type="number" step="1" value="60"><span>°C</span></div>
+        <div class="row"><label>Kp / Ki / Kd</label><input class="pKp" type="number" step="0.5" value="4" title="Kp [%/K]"><input class="pKi" type="number" step="0.01" value="0.15" title="Ki [%/(K·s)]"><input class="pKd" type="number" step="1" value="0" title="Kd [%·s/K]"></div>
+      </div>
+      <div class="pidLoop h2only" data-loop="1">
+        <div class="row"><label>Loop 2 → Heater 2</label><select class="pSensor"></select></div>
+        <div class="row"><label>Setpoint</label><input class="pSp" type="number" step="1" value="50"><span>°C</span></div>
+        <div class="row"><label>Kp / Ki / Kd</label><input class="pKp" type="number" step="0.5" value="4"><input class="pKi" type="number" step="0.01" value="0.15"><input class="pKd" type="number" step="1" value="0"></div>
+      </div>
+      <p class="note">Discrete PID at the firmware's 250 ms telemetry period, output clamped 0–100% with anti-windup. Pick "Off" to leave a heater at 0%.</p>
+    </div>
+    <div id="replayBox" class="hidden">
+      <div class="row"><label for="expSel">Experiment</label><select id="expSel"></select></div>
+      <div class="row"><label for="expOffset">Sensor offset fix</label><input id="expOffset" type="checkbox" checked><span class="note" style="margin:0">zero each sensor's start offset</span></div>
+      <div class="row"><label for="expAmb">Track ambient drift</label><input id="expAmb" type="checkbox"><span class="note" style="margin:0">follow logged A0 drift</span></div>
+      <p class="note" id="expDesc"></p>
+      <div class="btns"><button class="b primary" id="expRun">Load &amp; replay</button></div>
+      <div class="kv" id="rmsKV" style="margin-top:8px"></div>
+    </div>
+    <div class="row"><label for="fan">Fan PWM</label><input id="fan" type="range" min="0" max="100" value="0"><output id="fano">0%</output></div>
+  </div>
+
+  <div class="card">
+    <h2>Simulation</h2>
+    <div class="row"><label for="tAmb">Ambient</label><input id="tAmb" type="number" step="0.5" value="25"><span>°C</span></div>
+    <div class="row"><label for="speed">Speed</label>
+      <select id="speed"><option value="1">1× real time</option><option value="5" selected>5×</option><option value="20">20×</option><option value="100">100×</option><option value="1e9">Max</option></select></div>
+    <div class="row"><label for="res">Mesh</label>
+      <select id="res"><option value="0.3175" selected>0.3175 mm (fine)</option><option value="0.635">0.635 mm (fast, ~15× quicker)</option></select></div>
+    <div class="row"><label for="cmap">Colour range</label>
+      <select id="cmap"><option value="auto" selected>Auto</option><option value="fixed">Fixed 20–130 °C</option></select></div>
+    <div class="btns">
+      <button class="b primary" id="runBtn">Pause</button>
+      <button class="b" id="resetBtn">Reset</button>
+      <button class="b" id="clearFault">Clear fault</button>
+      <button class="b" id="csvBtn">Export CSV</button>
+    </div>
+    <div class="kv" id="simKV" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Physics parameters</summary>
+      <div class="row"><label for="pT">FR4 thickness</label><input id="pT" type="number" step="0.1" value="0.8" data-p="tFr4" data-s="1e-3"><span>mm</span></div>
+      <div class="row"><label for="pK">FR4 k (in-plane)</label><input id="pK" type="number" step="0.05" value="0.8" data-p="kFr4"><span>W/mK</span></div>
+      <div class="row"><label for="pCu">Copper / side</label><input id="pCu" type="number" step="0.5" value="1" data-p="cuOz"><span>oz</span></div>
+      <div class="row"><label for="pH">h natural @ΔT 50 K</label><input id="pH" type="number" step="0.5" value="14" data-p="h50"><span>W/m²K</span></div>
+      <div class="row"><label for="pHe">h ∝ ΔT^n, n =</label><input id="pHe" type="number" step="0.05" value="0.25" data-p="hExp"></div>
+      <div class="row"><label for="pE">Emissivity</label><input id="pE" type="number" step="0.05" value="0.9" data-p="emis"></div>
+      <div class="row"><label for="pF">Fan h @100%</label><input id="pF" type="number" step="5" value="40" data-p="hFan"><span>W/m²K</span></div>
+      <div class="row"><label for="pCr">Resistor heat cap.</label><input id="pCr" type="number" step="0.01" value="0.04" data-p="cRes"><span>J/K</span></div>
+      <div class="row"><label for="pTau">Sensor lag τ</label><input id="pTau" type="number" step="0.5" value="1.5" data-p="tauSensor"><span>s</span></div>
+      <div class="row"><label for="pTrip">Over-temp trip</label><input id="pTrip" type="number" step="1" value="125" data-p="trip"><span>°C</span></div>
+      <div class="row"><label for="pX">Heater crosstalk (dual)</label><input id="pX" type="number" step="0.01" min="0" max="0.5" value="0.14" data-p="xtalk"></div>
+      <p class="note">Crosstalk: fraction of a driven heater's power that appears at the opposite heater pad. In the Setup1 log the far-end sensor starts rising within ~0.5 s of switching one heater (B5 at +15% of B1's initial slope with H1, B1 at +13% with H2), far faster than conduction along the beam allows, so the dual board is modelled with 0.14.</p>
+      <p class="note">Calibration (0.635 mm mesh): h 14, crosstalk 0.14, 0.25 Ω/heater, 1.0 Ω shared, 5.0 V gives RMS error 1.3–2.0 K per sensor on Setup2_10Ohm and 2.5–4.4 K on Setup1.</p>
+      <p class="note">Both board faces convect and radiate. Copper on top and bottom is lumped with the FR4 into one sheet conductance per cell (the beam's via field couples the layers). Heater power enters over the 2512 footprints.</p>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Geometry (from gerbers)</summary>
+      <table class="geo" id="geoTable"></table>
+      <p class="note">Gerber job file lists 1.66 mm board thickness (Fusion default); the setup document specifies 0.8 mm, which is used here.</p>
+    </details>
+  </div>
+</aside>
+
+<main>
+  <section class="card">
+    <div class="chart-head">
+      <h2 style="margin:0">Board temperature map</h2>
+      <div class="legend">
+        <label><input type="checkbox" id="showCu"> copper</label>
+        <label><input type="checkbox" id="showRes" checked> heater resistors (bottom)</label>
+        <label><input type="checkbox" id="showVia" checked> vias</label>
+      </div>
+    </div>
+    <canvas id="map" height="330"></canvas>
+    <canvas id="profile" height="200"></canvas>
+  </section>
+  <section class="tiles" id="tiles"></section>
+  <section class="card">
+    <div class="chart-head">
+      <h2 style="margin:0">Sensor history</h2>
+      <div class="legend" id="histLegend"></div>
+    </div>
+    <canvas id="hist" height="340"></canvas>
+  </section>
+</main>
+</div>
+
+<script src="pcb_geometry.js"></script>
+<script src="experiment_data.js"></script>
+<script>
+'use strict';
+const GEO = window.PCB_GEOMETRY;
+const EXP = window.EXPERIMENT_DATA || {};
+const SIGMA = 5.670374e-8;
+const SENSOR_COLORS = ['#e8590c', '#f59f00', '#37b24d', '#1c7ed6', '#9c36b5'];
+const TELEMETRY_DT = 0.25;              // firmware telemetry/controller period [s]
+
+// ------------------------------------------------------------------ state
+const params = {
+  tFr4: 0.8e-3, kFr4: 0.8, rcFr4: 1900 * 1150,
+  cuOz: 1, kCu: 390, rcCu: 8960 * 385,
+  h50: 14, hExp: 0.25, emis: 0.9, hFan: 40,
+  cRes: 0.04, cSensor: 0.006, tauSensor: 1.5, trip: 125, xtalk: 0.14,
+};
+const cfg = {
+  board: 'single', resOhm: 10, vSup: 5.0, rSer: 0.25, rSrc: 1.0, iFan: 0.2, Ta: 25, dx: 0.3175,
+  mode: 'manual', duty: [100, 0], fan: 0, speed: 5,
+};
+let model = null;          // thermal grid
+let sim = null;            // run state
+let running = true;
+
+// ------------------------------------------------------------------ model build
+function rasterize(geo, dx) {
+  const bb = geo.bbox, k = dx > 0.5 ? 10 : 8;
+  const nx = Math.ceil((bb[2] - bb[0]) / dx - 1e-6), ny = Math.ceil((bb[3] - bb[1]) / dx - 1e-6);
+  const cw = nx * k, ch = ny * k, s = k / dx;
+  const mk = () => { const c = document.createElement('canvas'); c.width = cw; c.height = ch; const x = c.getContext('2d', { willReadFrequently: true }); x.setTransform(s, 0, 0, s, -bb[0] * s, -bb[1] * s); x.fillStyle = '#fff'; x.strokeStyle = '#fff'; return x; };
+  const poly = (ctx, pts) => { ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); };
+
+  const bctx = mk();
+  bctx.beginPath(); poly(bctx, geo.board); bctx.fill();
+  bctx.globalCompositeOperation = 'destination-out';
+  for (const c of geo.cutouts) { bctx.beginPath(); poly(bctx, c); bctx.fill(); }
+
+  const layer = (prims) => {
+    const ctx = mk(); ctx.lineCap = 'round';
+    for (const p of prims) {
+      ctx.globalCompositeOperation = p[1] === 'C' ? 'destination-out' : 'source-over';
+      if (p[0] === 'R') { ctx.beginPath(); for (const c of p[2]) poly(ctx, c); ctx.fill('nonzero'); }
+      else if (p[0] === 'L') { if (p[6] <= 0) continue; ctx.lineWidth = p[6]; ctx.beginPath(); ctx.moveTo(p[2], p[3]); ctx.lineTo(p[4], p[5]); ctx.stroke(); }
+      else if (p[4] === 'C') { ctx.beginPath(); ctx.arc(p[2], p[3], p[5] / 2, 0, 2 * Math.PI); ctx.fill(); }
+      else ctx.fillRect(p[2] - p[5] / 2, p[3] - p[6] / 2, p[5], p[6]);
+    }
+    return ctx;
+  };
+  const bd = bctx.getImageData(0, 0, cw, ch).data;
+  const td = layer(geo.top).getImageData(0, 0, cw, ch).data;
+  const btd = layer(geo.bottom).getImageData(0, 0, cw, ch).data;
+  const fb = new Float32Array(nx * ny), ft = new Float32Array(nx * ny), fbo = new Float32Array(nx * ny);
+  const inv = 1 / (k * k * 255 * 255);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    let sb = 0, st = 0, sbo = 0;
+    for (let v = 0; v < k; v++) {
+      let o = ((j * k + v) * cw + i * k) * 4 + 3;
+      for (let u = 0; u < k; u++, o += 4) { const b = bd[o]; sb += b * 255; st += b * td[o]; sbo += b * btd[o]; }
+    }
+    fb[j * nx + i] = sb * inv; ft[j * nx + i] = st * inv; fbo[j * nx + i] = sbo * inv;
+  }
+  return { nx, ny, fb, ft, fbo };
+}
+
+function buildModel(boardKey, dx) {
+  const geo = GEO[boardKey], bb = geo.bbox;
+  const r = rasterize(geo, dx);
+  const W = r.nx + 2, H = r.ny + 2, N = W * H;
+  const m = {
+    key: boardKey, geo, dx, W, H, nx: r.nx, ny: r.ny, bb,
+    fb: new Float32Array(N), ft: new Float32Array(N), fbo: new Float32Array(N),
+    C: new Float64Array(N), invC: new Float64Array(N), A2: new Float64Array(N),
+    Ge: new Float64Array(N), Gn: new Float64Array(N), hC: new Float64Array(N), Pin: new Float64Array(N),
+    active: null, heaterCells: [], sensorCells: [],
+  };
+  for (let j = 0; j < r.ny; j++) for (let i = 0; i < r.nx; i++) {
+    const c = (j + 1) * W + (i + 1), s = j * r.nx + i;
+    m.fb[c] = r.fb[s]; m.ft[c] = r.ft[s]; m.fbo[c] = r.fbo[s];
+  }
+  const act = [];
+  for (let c = 0; c < N; c++) if (m.fb[c] > 0.02) act.push(c);
+  m.active = Int32Array.from(act);
+  m.cx = (c) => bb[0] + ((c % W) - 0.5) * dx;          // cell centre, board mm
+  m.cy = (c) => bb[1] + (Math.floor(c / W) - 0.5) * dx;
+  m.cellAt = (x, y) => (Math.floor((y - bb[1]) / dx) + 1) * W + Math.floor((x - bb[0]) / dx) + 1;
+
+  // heater power distribution: area overlap of each 2512 footprint with cells
+  for (const h of geo.heaters) {
+    const w = new Map();
+    for (const res of h.resistors) {
+      const [x0, y0, x1, y1] = res.rect;
+      const i0 = Math.floor((x0 - bb[0]) / dx) + 1, i1 = Math.floor((x1 - bb[0]) / dx) + 1;
+      const j0 = Math.floor((y0 - bb[1]) / dx) + 1, j1 = Math.floor((y1 - bb[1]) / dx) + 1;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const cx0 = bb[0] + (i - 1) * dx, cy0 = bb[1] + (j - 1) * dx;
+        const ox = Math.max(0, Math.min(x1, cx0 + dx) - Math.max(x0, cx0));
+        const oy = Math.max(0, Math.min(y1, cy0 + dx) - Math.max(y0, cy0));
+        const a = ox * oy, c = j * W + i;
+        if (a > 0 && m.fb[c] > 0.02) w.set(c, (w.get(c) || 0) + a);
+      }
+    }
+    let tot = 0; for (const v of w.values()) tot += v;
+    m.heaterCells.push({ cells: Int32Array.from(w.keys()), w: Float64Array.from([...w.values()].map(v => v / tot)) });
+  }
+  // sensor footprint: cells within 0.8 mm of the SOT-23 centre
+  for (const s of geo.sensors) {
+    const cells = [];
+    for (const c of m.active) if (Math.hypot(m.cx(c) - s.center[0], m.cy(c) - s.center[1]) <= Math.max(0.8, dx * 0.75)) cells.push(c);
+    m.sensorCells.push(Int32Array.from(cells));
+  }
+  updateProps(m);
+  return m;
+}
+
+// conductances / capacities from params (keeps grid, so live edits keep the temperature field)
+function updateProps(m) {
+  const tCu = params.cuOz * 35e-6, dx = m.dx * 1e-3, a = dx * dx;
+  const kt = new Float64Array(m.W * m.H);
+  for (const c of m.active) {
+    const fb = m.fb[c], fcu = Math.min(m.ft[c], fb) + Math.min(m.fbo[c], fb);
+    kt[c] = fb * params.kFr4 * params.tFr4 + params.kCu * tCu * fcu;
+    m.C[c] = a * (fb * params.rcFr4 * params.tFr4 + params.rcCu * tCu * fcu);
+    m.A2[c] = 2 * a * fb;
+  }
+  for (const h of m.heaterCells) h.cells.forEach((c, k) => { m.C[c] += params.cRes * (m.geo.heaters[0].resistors.length) * h.w[k]; });
+  for (const sc of m.sensorCells) for (const c of sc) m.C[c] += params.cSensor / sc.length;
+  const hm = (p, q) => (p > 0 && q > 0) ? 2 * p * q / (p + q) : 0;
+  let dtMax = Infinity;
+  for (const c of m.active) {
+    m.Ge[c] = hm(kt[c], kt[c + 1]);
+    m.Gn[c] = hm(kt[c], kt[c + m.W]);
+  }
+  for (const c of m.active) {
+    m.invC[c] = 1 / m.C[c];
+    const g = m.Ge[c] + m.Ge[c - 1] + m.Gn[c] + m.Gn[c - m.W] + m.A2[c] * (60 + params.hFan + 4 * params.emis * SIGMA * Math.pow(450, 3));
+    dtMax = Math.min(dtMax, m.C[c] / g);
+  }
+  m.dt = 0.9 * dtMax;
+  // number of steps per telemetry period (exact division keeps the 250 ms grid)
+  m.sub = Math.ceil(TELEMETRY_DT / m.dt);
+  m.dt = TELEMETRY_DT / m.sub;
+}
+
+// ------------------------------------------------------------------ simulation
+function newSim(m) {
+  const N = m.W * m.H;
+  const T = new Float64Array(N).fill(cfg.Ta), Tn = new Float64Array(N).fill(cfg.Ta);
+  return {
+    t: 0, T, Tn, Ta: cfg.Ta, sensor: m.sensorCells.map(() => cfg.Ta), duty: [0, 0], fan: 0,
+    P: [0, 0], energy: 0, fault: false, log: [], pid: [{ i: 0, prev: null }, { i: 0, prev: null }],
+    replay: null, rms: null, stepsSinceH: 1e9,
+  };
+}
+
+// Heater k: 2 RMCF2512 resistors + its own AO3400A/wiring (rSer); both heaters and the fan share the
+// USB supply source resistance (rSrc: PTC fuse NANOSMDC075F-2, cable, board input path).
+// n = number of heaters conducting at the same instant; fanFrac = fan PWM 0..1 (average fan current).
+function heaterElectrical(n = 1, fanFrac = 0) {
+  const R = 2 * cfg.resOhm, Rh = R + cfg.rSer;
+  const V = cfg.vSup - cfg.iFan * fanFrac * cfg.rSrc;
+  const I = V / (Rh + n * cfg.rSrc);
+  return { R, I, P: I * I * R };
+}
+
+// D9/D10 are both on Timer1 (edge-aligned PWM): for min(d1,d2) of each period both heaters
+// conduct and the shared supply sags; for the remainder only the larger duty conducts.
+function heaterPowers(d1, d2, fan = 0) {
+  const p1 = heaterElectrical(1, fan / 100).P, p2 = heaterElectrical(2, fan / 100).P;
+  const a = d1 / 100, b = d2 / 100, both = Math.min(a, b);
+  return [both * p2 + (a - both) * p1, both * p2 + (b - both) * p1];
+}
+
+function applyPower(m, s) {
+  for (const c of m.active) m.Pin[c] = 0;
+  const p = m.heaterCells.length > 1 ? heaterPowers(s.duty[0], s.duty[1], s.fan) : heaterPowers(s.duty[0], 0, s.fan);
+  if (m.heaterCells.length < 2) p[1] = 0;
+  s.P[0] = p[0]; s.P[1] = p[1];
+  // dual board: a fraction of each heater's power appears at the opposite heater pad (fitted to Setup1 log)
+  const x = m.heaterCells.length > 1 ? params.xtalk : 0;
+  m.heaterCells.forEach((h, k) => {
+    const pk = p[k] * (1 - x) + p[1 - k] * x;
+    for (let n = 0; n < h.cells.length; n++) m.Pin[h.cells[n]] += pk * h.w[n];
+  });
+}
+
+function updateConvection(m, s) {
+  const T = s.T, Ta = s.Ta, hf = params.hFan * s.fan / 100, n = params.hExp, h50 = params.h50;
+  for (const c of m.active) {
+    const d = Math.max(Math.abs(T[c] - Ta), 0.5);
+    m.hC[c] = h50 * (n ? Math.pow(d / 50, n) : 1) + hf;
+  }
+}
+
+function stepN(m, s, steps) {
+  const act = m.active, Ge = m.Ge, Gn = m.Gn, Pin = m.Pin, A2 = m.A2, hC = m.hC, invC = m.invC, W = m.W;
+  const dt = m.dt, Ta = s.Ta, TaK = Ta + 273.15, Ta4 = TaK * TaK * TaK * TaK, er = params.emis * SIGMA;
+  let T = s.T, Tn = s.Tn;
+  for (let k = 0; k < steps; k++) {
+    if (++s.stepsSinceH >= 40) { updateConvection(m, s); s.stepsSinceH = 0; }
+    for (let n = 0, L = act.length; n < L; n++) {
+      const c = act[n], Ti = T[c], Tk = Ti + 273.15;
+      const q = Pin[c]
+        + Ge[c] * (T[c + 1] - Ti) + Ge[c - 1] * (T[c - 1] - Ti)
+        + Gn[c] * (T[c + W] - Ti) + Gn[c - W] * (T[c - W] - Ti)
+        - A2[c] * (hC[c] * (Ti - Ta) + er * (Tk * Tk * Tk * Tk - Ta4));
+      Tn[c] = Ti + dt * q * invC[c];
+    }
+    const x = T; T = Tn; Tn = x;
+  }
+  s.T = T; s.Tn = Tn;
+  s.t += steps * dt;
+  s.energy += (s.P[0] + s.P[1]) * steps * dt;
+}
+
+function readSensors(m, s, dtS) {
+  const a = params.tauSensor > 0 ? 1 - Math.exp(-dtS / params.tauSensor) : 1;
+  m.sensorCells.forEach((cells, k) => {
+    let v = 0; for (const c of cells) v += s.T[c]; v /= cells.length;
+    s.sensor[k] += a * (v - s.sensor[k]);
+  });
+}
+
+// one 250 ms telemetry period: controller → physics → sensors → safety → log
+function tick(m, s) {
+  // drive
+  if (s.replay) {
+    const rp = s.replay, rows = rp.exp.rows;
+    while (rp.idx + 1 < rows.length && rows[rp.idx + 1][0] <= s.t) rp.idx++;
+    const r = rows[rp.idx];
+    s.duty = [r[7], m.heaterCells.length > 1 ? r[8] : 0]; s.fan = r[9];
+    if (rp.trackAmb) s.Ta = rp.Ta0 + (r[1] - rp.amb0);
+  } else if (cfg.mode === 'pid') {
+    s.duty = [0, 0];
+    document.querySelectorAll('.pidLoop').forEach((el, k) => {
+      if (k >= m.heaterCells.length) return;
+      const si = +el.querySelector('.pSensor').value;
+      if (si < 0) { s.pid[k].i = 0; return; }
+      const sp = +el.querySelector('.pSp').value, kp = +el.querySelector('.pKp').value;
+      const ki = +el.querySelector('.pKi').value, kd = +el.querySelector('.pKd').value;
+      const y = s.sensor[si], e = sp - y, st = s.pid[k];
+      const d = st.prev === null ? 0 : -kd * (y - st.prev) / TELEMETRY_DT;
+      st.prev = y;
+      const uUnsat = kp * e + st.i + d;
+      // conditional integration (anti-windup)
+      if ((uUnsat < 100 || e < 0) && (uUnsat > 0 || e > 0)) st.i = Math.min(100, Math.max(0, st.i + ki * e * TELEMETRY_DT));
+      s.duty[k] = Math.min(100, Math.max(0, kp * e + st.i + d));
+    });
+    s.fan = cfg.fan;
+  } else {
+    s.duty = [cfg.duty[0], m.heaterCells.length > 1 ? cfg.duty[1] : 0]; s.fan = cfg.fan;
+  }
+  if (s.fault) { s.duty = [0, 0]; s.fan = 100; }
+  applyPower(m, s);
+
+  stepN(m, s, m.sub);
+  readSensors(m, s, TELEMETRY_DT);
+
+  if (!s.fault && s.sensor.some(v => v >= params.trip)) {
+    s.fault = true; s.duty = [0, 0]; s.fan = 100; applyPower(m, s);
+  }
+  let tmax = -1e9; for (const c of m.active) if (s.T[c] > tmax) tmax = s.T[c];
+  s.log.push({ t: s.t, s: s.sensor.slice(), d: s.duty.slice(), fan: s.fan, P: s.P.slice(), Ta: s.Ta, tmax });
+}
+
+// ------------------------------------------------------------------ replay
+function measuredAt(rp, t) {
+  const rows = rp.exp.rows;
+  let lo = 0, hi = rows.length - 1;
+  if (t <= rows[0][0]) return rp.corr(rows[0]);
+  if (t >= rows[hi][0]) return rp.corr(rows[hi]);
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (rows[mid][0] <= t) lo = mid; else hi = mid; }
+  const a = rows[lo], b = rows[hi], f = (t - a[0]) / (b[0] - a[0]);
+  const ca = rp.corr(a), cb = rp.corr(b);
+  return ca.map((v, k) => v + f * (cb[k] - v));
+}
+
+function makeReplay(id, offsetFix, trackAmb) {
+  const exp = EXP[id];
+  const n0 = Math.min(8, exp.rows.length);
+  const base = [0, 0, 0, 0, 0];
+  for (let r = 0; r < n0; r++) for (let k = 0; k < 5; k++) base[k] += exp.rows[r][2 + k] / n0;
+  const Ta0 = base.reduce((p, q) => p + q, 0) / 5;
+  const off = base.map(b => offsetFix ? b - Ta0 : 0);
+  return {
+    id, exp, idx: 0, Ta0, amb0: exp.rows[0][1], trackAmb, off,
+    corr: (row) => [0, 1, 2, 3, 4].map(k => row[2 + k] - off[k]),
+    tEnd: exp.rows[exp.rows.length - 1][0],
+  };
+}
+
+function computeRms(s) {
+  const rp = s.replay; if (!rp) return null;
+  const err = [0, 0, 0, 0, 0], peak = [0, 0, 0, 0, 0]; let n = 0;
+  for (const e of s.log) {
+    if (e.t > rp.tEnd) break;
+    const mv = measuredAt(rp, e.t);
+    for (let k = 0; k < 5; k++) { const d = e.s[k] - mv[k]; err[k] += d * d; peak[k] = Math.max(peak[k], Math.abs(d)); }
+    n++;
+  }
+  return { rms: err.map(v => Math.sqrt(v / Math.max(n, 1))), peak };
+}
+
+// Headless replay for calibration from the console:  runReplayHeadless('single_10ohm', {h50: 12})
+function runReplayHeadless(id, over = {}, dx = cfg.dx, opts = {}) {
+  const saved = { ...params }; Object.assign(params, over);
+  const e = EXP[id], savedCfg = { ...cfg };
+  cfg.resOhm = opts.resOhm ?? e.resistor_ohm; cfg.vSup = opts.vSup ?? cfg.vSup; cfg.rSer = opts.rSer ?? cfg.rSer; cfg.rSrc = opts.rSrc ?? cfg.rSrc;
+  const m = buildModel(e.board, dx);
+  const rp = makeReplay(id, opts.offsetFix ?? true, opts.trackAmb ?? false);
+  cfg.Ta = rp.Ta0;
+  const s = newSim(m); s.replay = rp; s.Ta = rp.Ta0;
+  while (s.t < rp.tEnd) tick(m, s);
+  const out = computeRms(s);
+  Object.assign(params, saved); Object.assign(cfg, savedCfg);
+  out.final = s.log[s.log.length - 1];
+  return out;
+}
+window.runReplayHeadless = runReplayHeadless;
+
+// ------------------------------------------------------------------ drawing helpers
+const INFERNO = [[0, 0, 0, 4], [0.13, 27, 12, 65], [0.25, 74, 12, 107], [0.38, 120, 28, 109], [0.5, 165, 44, 96], [0.63, 207, 68, 70], [0.75, 237, 105, 37], [0.88, 251, 155, 6], [1, 252, 255, 164]];
+const LUT = (() => {
+  const l = new Uint8ClampedArray(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255; let k = 0; while (k < INFERNO.length - 2 && INFERNO[k + 1][0] < t) k++;
+    const a = INFERNO[k], b = INFERNO[k + 1], f = (t - a[0]) / (b[0] - a[0]);
+    for (let q = 0; q < 3; q++) l[i * 3 + q] = a[q + 1] + f * (b[q + 1] - a[q + 1]);
+  }
+  return l;
+})();
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function fitCanvas(cv) {
+  // logical height lives in data-h (canvas.height rewrites the height attribute)
+  if (!cv.dataset.h) cv.dataset.h = cv.getAttribute('height');
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = +cv.dataset.h;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px'; }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+function niceTicks(lo, hi, n) {
+  const span = hi - lo || 1, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(f => f * mag).find(s => s >= step0);
+  const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+
+// board → screen: board Y (beam axis) runs left→right, board X runs top→bottom
+const ML = 46, MR = 14;
+function mapXf(w) {
+  const bb = model.bb, S = (w - ML - MR) / (bb[3] - bb[1]);
+  return { S, sx: (y) => ML + (y - bb[1]) * S, sy: (x) => 10 + (x - bb[0]) * S };
+}
+
+function colorRange() {
+  if (cfg.cmapFixed) return [20, 130];
+  let tmax = sim.Ta + 5; for (const c of model.active) if (sim.T[c] > tmax) tmax = sim.T[c];
+  return [sim.Ta - 1, Math.max(tmax, sim.Ta + 10)];
+}
+
+let mapImg = null;
+function drawMap() {
+  const cv = document.getElementById('map');
+  const bb = model.bb;
+  const wNeed = cv.clientWidth, S0 = (wNeed - ML - MR) / (bb[3] - bb[1]);
+  cv.dataset.h = Math.round((bb[2] - bb[0]) * S0 + 54);
+  const { ctx, w, h } = fitCanvas(cv);
+  const X = mapXf(w), S = X.S;
+  ctx.fillStyle = css('--panel'); ctx.fillRect(0, 0, w, h);
+  const [lo, hi] = colorRange();
+
+  // field image: rotated so image x = board y cell, image y = board x cell
+  const nx = model.nx, ny = model.ny;
+  if (!mapImg || mapImg.width !== ny || mapImg.height !== nx) { mapImg = document.createElement('canvas'); mapImg.width = ny; mapImg.height = nx; }
+  const ictx = mapImg.getContext('2d'), id = ictx.createImageData(ny, nx), d = id.data;
+  const T = sim.T, W = model.W, inv = 255 / (hi - lo);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const c = (j + 1) * W + i + 1, o = (i * ny + j) * 4, fb = model.fb[c];
+    if (fb <= 0.02) continue;
+    const q = Math.max(0, Math.min(255, Math.round((T[c] - lo) * inv))) * 3;
+    d[o] = LUT[q]; d[o + 1] = LUT[q + 1]; d[o + 2] = LUT[q + 2]; d[o + 3] = Math.min(255, fb * 320);
+  }
+  ictx.putImageData(id, 0, 0);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(mapImg, X.sx(bb[1]), X.sy(bb[0]), (bb[3] - bb[1]) * S, (bb[2] - bb[0]) * S);
+
+  // vector overlays in board coordinates
+  ctx.setTransform(ctx.getTransform().multiply(new DOMMatrix([0, S, S, 0, ML - bb[1] * S, 10 - bb[0] * S])));
+  const lw = 1 / S;
+  const path = (pts) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const p of pts) ctx.lineTo(p[0], p[1]); ctx.closePath(); };
+  ctx.lineWidth = 1.2 * lw; ctx.strokeStyle = css('--muted');
+  path(model.geo.board); ctx.stroke();
+  for (const c of model.geo.cutouts) { path(c); ctx.stroke(); }
+  if (document.getElementById('showCu').checked) {
+    ctx.strokeStyle = 'rgba(230,160,90,0.85)'; ctx.lineWidth = 0.9 * lw;
+    for (const p of model.geo.top) if (p[0] === 'R' && p[1] === 'D') for (const c of p[2]) { path(c); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(230,160,90,0.45)';
+    for (const p of model.geo.top) if (p[0] === 'L' && p[6] > 0) { ctx.lineWidth = Math.max(p[6], 0.6 * lw); ctx.beginPath(); ctx.moveTo(p[2], p[3]); ctx.lineTo(p[4], p[5]); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(110,170,255,0.4)';
+    for (const p of model.geo.bottom) if (p[0] === 'L' && p[6] > 0) { ctx.lineWidth = Math.max(p[6], 0.6 * lw); ctx.beginPath(); ctx.moveTo(p[2], p[3]); ctx.lineTo(p[4], p[5]); ctx.stroke(); }
+  }
+  if (document.getElementById('showVia').checked) {
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    for (const dr of model.geo.drills) if (dr[2] < 0.5) { ctx.beginPath(); ctx.arc(dr[0], dr[1], dr[2] / 2, 0, 7); ctx.fill(); }
+  }
+  if (document.getElementById('showRes').checked) {
+    ctx.setLineDash([3 * lw, 2 * lw]); ctx.lineWidth = 1.2 * lw; ctx.strokeStyle = '#4dd4ff';
+    for (const h of model.geo.heaters) for (const r of h.resistors) { const [x0, y0, x1, y1] = r.rect; ctx.strokeRect(x0, y0, x1 - x0, y1 - y0); }
+    ctx.setLineDash([]);
+  }
+  model.geo.sensors.forEach((s, k) => {
+    ctx.fillStyle = SENSOR_COLORS[k]; ctx.strokeStyle = '#fff'; ctx.lineWidth = lw;
+    ctx.beginPath(); ctx.rect(s.center[0] - 0.65, s.center[1] - 1.45, 1.3, 2.9); ctx.fill(); ctx.stroke();
+  });
+  ctx.restore();
+
+  // labels (screen space)
+  ctx.font = '600 11px system-ui, sans-serif'; ctx.textAlign = 'center';
+  model.geo.sensors.forEach((s, k) => {
+    const x = X.sx(s.center[1]), y = X.sy(bb[0]) - 0;
+    ctx.fillStyle = SENSOR_COLORS[k];
+    ctx.fillText(`B${k + 1} ${sim.sensor[k].toFixed(1)}°`, x, X.sy(bb[2]) + 14);
+  });
+  ctx.fillStyle = css('--muted'); ctx.font = '11px system-ui, sans-serif';
+  model.geo.heaters.forEach((hh, k) => ctx.fillText(`Heater ${k + 1}: ${sim.P[k].toFixed(2)} W`, X.sx(hh.center[1]), X.sy(bb[2]) + 28));
+  // scale bar
+  ctx.strokeStyle = css('--muted'); ctx.lineWidth = 1.5; ctx.beginPath();
+  const sb0 = X.sx(bb[1]), sbY = X.sy(bb[2]) + 44; ctx.moveTo(sb0, sbY); ctx.lineTo(sb0 + 10 * S, sbY); ctx.stroke();
+  ctx.textAlign = 'left'; ctx.fillText('10 mm', sb0 + 10 * S + 6, sbY + 4);
+  // colour bar
+  const cbx = 6, cby = X.sy(bb[0]), cbh = (bb[2] - bb[0]) * S;
+  for (let i = 0; i < cbh; i++) { const q = Math.round(255 * (1 - i / cbh)) * 3; ctx.fillStyle = `rgb(${LUT[q]},${LUT[q + 1]},${LUT[q + 2]})`; ctx.fillRect(cbx, cby + i, 10, 1.5); }
+  ctx.textAlign = 'left'; ctx.fillStyle = css('--ink');
+  ctx.fillText(hi.toFixed(0) + '°', cbx + 13, cby + 9); ctx.fillText(lo.toFixed(0) + '°', cbx + 13, cby + cbh);
+}
+
+function drawProfile() {
+  const { ctx, w, h } = fitCanvas(document.getElementById('profile'));
+  const X = mapXf(w), bb = model.bb, W = model.W;
+  ctx.fillStyle = css('--panel'); ctx.fillRect(0, 0, w, h);
+  const xLine = model.geo.heaters[0].center[0];
+  const i = Math.floor((xLine - bb[0]) / model.dx) + 1;
+  const pts = [];
+  for (let j = 1; j <= model.ny; j++) { const c = j * W + i; pts.push(model.fb[c] > 0.5 ? [model.cy(c), sim.T[c]] : null); }
+  const vals = pts.filter(Boolean).map(p => p[1]).concat(sim.sensor);
+  let meas = null;
+  if (sim.replay) { meas = measuredAt(sim.replay, sim.t); vals.push(...meas); }
+  const lo = Math.floor(Math.min(sim.Ta, ...vals) - 2), hi = Math.ceil(Math.max(...vals) + 3);
+  const top = 12, bot = h - 26, Y = (v) => bot - (v - lo) / (hi - lo) * (bot - top);
+  ctx.strokeStyle = css('--grid'); ctx.fillStyle = css('--muted'); ctx.font = '11px system-ui, sans-serif'; ctx.lineWidth = 1;
+  ctx.textAlign = 'right';
+  for (const v of niceTicks(lo, hi, 5)) { ctx.beginPath(); ctx.moveTo(ML, Y(v)); ctx.lineTo(w - MR, Y(v)); ctx.stroke(); ctx.fillText(v + '°', ML - 6, Y(v) + 4); }
+  ctx.textAlign = 'center';
+  const h0 = model.geo.heaters[0].center[1];
+  for (let v = Math.ceil((bb[1] - h0) / 10) * 10; v <= bb[3] - h0; v += 10) {
+    const x = X.sx(h0 + v); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bot); ctx.stroke(); ctx.fillText(v + ' mm', x, bot + 15);
+  }
+  ctx.textAlign = 'left'; ctx.fillText('distance from heater 1 centre · centre-line x = ' + xLine.toFixed(2) + ' mm', ML, h - 1);
+  ctx.strokeStyle = css('--ink'); ctx.lineWidth = 2; ctx.beginPath();
+  let pen = false;
+  for (const p of pts) { if (!p) { pen = false; continue; } const x = X.sx(p[0]), y = Y(p[1]); pen ? ctx.lineTo(x, y) : ctx.moveTo(x, y); pen = true; }
+  ctx.stroke();
+  model.geo.sensors.forEach((s, k) => {
+    const x = X.sx(s.center[1]);
+    ctx.fillStyle = SENSOR_COLORS[k]; ctx.beginPath(); ctx.arc(x, Y(sim.sensor[k]), 5, 0, 7); ctx.fill();
+    if (meas) { ctx.strokeStyle = SENSOR_COLORS[k]; ctx.lineWidth = 2; ctx.beginPath(); ctx.rect(x - 5, Y(meas[k]) - 5, 10, 10); ctx.stroke(); }
+  });
+}
+
+let hover = null;
+function drawHist() {
+  const cv = document.getElementById('hist');
+  const { ctx, w, h } = fitCanvas(cv);
+  ctx.fillStyle = css('--panel'); ctx.fillRect(0, 0, w, h);
+  const log = sim.log, L = 46, R = 14, T0 = 10, splitY = h - 96, B = h - 22;
+  const tEnd = Math.max(sim.replay ? sim.replay.tEnd : 0, log.length ? log[log.length - 1].t : 0, 30);
+  const Xt = (t) => L + t / tEnd * (w - L - R);
+  let lo = sim.Ta, hi = sim.Ta + 5;
+  for (const e of log) for (const v of e.s) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  if (sim.replay) for (const r of sim.replay.exp.rows) for (const v of sim.replay.corr(r)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  lo = Math.floor(lo - 1); hi = Math.ceil(hi + 2);
+  const Y = (v) => splitY - 8 - (v - lo) / (hi - lo) * (splitY - 8 - T0);
+  const Yd = (v) => B - v / 100 * (B - splitY - 6);
+  ctx.font = '11px system-ui, sans-serif'; ctx.lineWidth = 1; ctx.strokeStyle = css('--grid'); ctx.fillStyle = css('--muted');
+  ctx.textAlign = 'right';
+  for (const v of niceTicks(lo, hi, 6)) { ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(w - R, Y(v)); ctx.stroke(); ctx.fillText(v + '°', L - 6, Y(v) + 4); }
+  for (const v of [0, 50, 100]) { ctx.beginPath(); ctx.moveTo(L, Yd(v)); ctx.lineTo(w - R, Yd(v)); ctx.stroke(); ctx.fillText(v + '%', L - 6, Yd(v) + 4); }
+  ctx.textAlign = 'center';
+  for (const t of niceTicks(0, tEnd, 8)) { const x = Xt(t); ctx.beginPath(); ctx.moveTo(x, T0); ctx.lineTo(x, B); ctx.stroke(); ctx.fillText(t + ' s', x, h - 6); }
+
+  const step = Math.max(1, Math.floor(log.length / (w * 1.5)));
+  const line = (get, color, width, dash) => {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.beginPath();
+    for (let n = 0; n < log.length; n += step) { const e = log[n], x = Xt(e.t), y = get(e); n ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    if (log.length) { const e = log[log.length - 1]; ctx.lineTo(Xt(e.t), get(e)); }
+    ctx.stroke(); ctx.setLineDash([]);
+  };
+  if (sim.replay) {
+    const rows = sim.replay.exp.rows, st = Math.max(1, Math.floor(rows.length / (w * 1.5)));
+    for (let k = 0; k < 5; k++) {
+      ctx.strokeStyle = SENSOR_COLORS[k]; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]); ctx.beginPath();
+      for (let n = 0; n < rows.length; n += st) { const v = sim.replay.corr(rows[n])[k], x = Xt(rows[n][0]); n ? ctx.lineTo(x, Y(v)) : ctx.moveTo(x, Y(v)); }
+      ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+  }
+  for (let k = 0; k < 5; k++) line(e => Y(e.s[k]), SENSOR_COLORS[k], 2);
+  line(e => Yd(e.d[0]), css('--ink'), 1.5);
+  if (model.heaterCells.length > 1) line(e => Yd(e.d[1]), css('--muted'), 1.5, [4, 3]);
+  line(e => Yd(e.fan), '#4dd4ff', 1, [2, 2]);
+  ctx.fillStyle = css('--muted'); ctx.textAlign = 'left';
+  ctx.fillText('heater / fan PWM', L + 4, splitY + 6);
+
+  if (hover && log.length) {
+    const t = (hover - L) / (w - L - R) * tEnd;
+    let lo2 = 0, hi2 = log.length - 1;
+    while (hi2 - lo2 > 1) { const mid = (lo2 + hi2) >> 1; if (log[mid].t <= t) lo2 = mid; else hi2 = mid; }
+    const e = log[Math.abs(log[lo2].t - t) < Math.abs(log[hi2].t - t) ? lo2 : hi2];
+    if (e && Math.abs(e.t - t) < tEnd * 0.05) {
+      const x = Xt(e.t);
+      ctx.strokeStyle = css('--muted'); ctx.beginPath(); ctx.moveTo(x, T0); ctx.lineTo(x, B); ctx.stroke();
+      const mv = sim.replay ? measuredAt(sim.replay, e.t) : null;
+      const lines = [`t = ${e.t.toFixed(1)} s`, ...e.s.map((v, k) => `B${k + 1}  ${v.toFixed(1)}°` + (mv ? `  (meas ${mv[k].toFixed(1)})` : '')),
+        `H1 ${e.d[0].toFixed(0)}%` + (model.heaterCells.length > 1 ? `  H2 ${e.d[1].toFixed(0)}%` : '') + `  fan ${e.fan}%`];
+      const bw = mv ? 190 : 120, bh = lines.length * 15 + 8, bx = x + 10 + bw > w ? x - bw - 10 : x + 10;
+      ctx.fillStyle = css('--panel'); ctx.strokeStyle = css('--line'); ctx.fillRect(bx, T0 + 4, bw, bh); ctx.strokeRect(bx, T0 + 4, bw, bh);
+      lines.forEach((s, k) => { ctx.fillStyle = k >= 1 && k <= 5 ? SENSOR_COLORS[k - 1] : css('--ink'); ctx.fillText(s, bx + 8, T0 + 18 + k * 15); });
+    }
+  }
+}
+
+// ------------------------------------------------------------------ UI
+const $ = (id) => document.getElementById(id);
+function kv(el, pairs) { el.innerHTML = pairs.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join(''); }
+
+function buildTiles() {
+  $('tiles').innerHTML = model.geo.sensors.map((s, k) =>
+    `<div class="tile" style="--c:${SENSOR_COLORS[k]}"><div class="n">Beam ${k + 1} · A${k + 1} · ${(s.center[1] - model.geo.heaters[0].center[1]).toFixed(2)} mm</div><div class="v" id="tv${k}">–</div><div class="s" id="ts${k}"></div></div>`).join('');
+  $('histLegend').innerHTML = model.geo.sensors.map((s, k) => `<span><i style="background:${SENSOR_COLORS[k]}"></i>B${k + 1}</span>`).join('') +
+    '<span><i style="background:var(--ink)"></i>H1 PWM</span>' + (model.heaterCells.length > 1 ? '<span><i style="background:var(--muted)"></i>H2 PWM</span>' : '') +
+    '<span><i style="background:#4dd4ff"></i>fan</span><span class="replayOnly"><i style="background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 7px)"></i>measured</span>';
+  const opts = '<option value="-1">Off</option>' + model.geo.sensors.map((s, k) => `<option value="${k}">Beam ${k + 1}</option>`).join('');
+  document.querySelectorAll('.pSensor').forEach((el, k) => { const v = el.value; el.innerHTML = opts; el.value = v !== '' ? v : (k === 0 ? '0' : '4'); });
+}
+
+function buildGeoTable() {
+  const g = model.geo, h0 = g.heaters[0].center, pads = g.pours;
+  const beam = pads.find(p => p[2] - p[0] < 6), heat = pads.find(p => p[2] - p[0] > 9);
+  const beamEnd = Math.max(...pads.filter(p => p[2] - p[0] < 6).map(p => p[3]));
+  const rows = [
+    ['Board outline', `${(g.bbox[2] - g.bbox[0]).toFixed(2)} × ${(g.bbox[3] - g.bbox[1]).toFixed(2)} mm`],
+    ['Heater copper area', `${(heat[2] - heat[0]).toFixed(2)} × ${(heat[3] - heat[1]).toFixed(3)} mm`],
+    ['Beam copper width', `${(beam[2] - beam[0]).toFixed(2)} mm`],
+    [model.key === 'dual' ? 'Beam between heater pads' : 'Beam from heater edge', `${(beamEnd - heat[3]).toFixed(2)} mm`],
+    ['Heater 1 centre (2× 2512)', `y = ${h0[1].toFixed(2)} mm`],
+    ...(g.heaters[1] ? [['Heater spacing (centres)', `${(g.heaters[1].center[1] - h0[1]).toFixed(2)} mm`]] : []),
+    ...g.sensors.map((s, k) => [`Beam ${k + 1} sensor`, `${(s.center[1] - h0[1]).toFixed(2)} mm`]),
+    ['Slot cut-outs', `${g.cutouts.length}`],
+    ['Vias (0.35 mm)', `${g.drills.filter(d => Math.abs(d[2] - 0.35) < 0.01).length}`],
+    ['Mesh', `${model.nx} × ${model.ny} cells, ${model.active.length} active, dt ${(model.dt * 1e3).toFixed(2)} ms`],
+    ['Source', g.source.split('/').pop()],
+  ];
+  $('geoTable').innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+}
+
+function updateElec() {
+  const e = heaterElectrical(1), e2 = heaterElectrical(2), n = model.heaterCells.length;
+  const nominal = cfg.vSup * cfg.vSup / e.R;
+  kv($('elecKV'), [
+    ['Heater resistance', `${e.R.toFixed(1)} Ω`], ['Nominal V²/R', `${nominal.toFixed(2)} W`],
+    ['Current @100%', `${(e.I * 1000).toFixed(0)} mA`], ['Power @100%', `${e.P.toFixed(2)} W`],
+    ['… with fan at 100%', `${heaterElectrical(1, 1).P.toFixed(2)} W`],
+    ...(n > 1 ? [['Both @100%, each', `${e2.P.toFixed(2)} W`], ['Max total', `${(2 * e2.P).toFixed(2)} W`]] : []),
+  ]);
+}
+
+function updateReadouts() {
+  const lastLog = sim.log[sim.log.length - 1];
+  const mv = sim.replay ? measuredAt(sim.replay, sim.t) : null;
+  let rate = 0;
+  if (sim.log.length > 41) { const a = sim.log[sim.log.length - 41]; rate = (lastLog.s[0] - a.s[0]) / (lastLog.t - a.t); }
+  for (let k = 0; k < model.geo.sensors.length; k++) {
+    $('tv' + k).textContent = sim.sensor[k].toFixed(1) + ' °C';
+    $('ts' + k).textContent = mv ? `meas ${mv[k].toFixed(1)} · Δ ${(sim.sensor[k] - mv[k]).toFixed(1)} K` : `ΔT ${(sim.sensor[k] - sim.Ta).toFixed(1)} K`;
+  }
+  const e = heaterElectrical();
+  kv($('simKV'), [
+    ['Time', `${sim.t.toFixed(1)} s`],
+    ['Heater power', model.heaterCells.length > 1 ? `${sim.P[0].toFixed(2)} + ${sim.P[1].toFixed(2)} W` : `${sim.P[0].toFixed(2)} W`],
+    ['Duty', model.heaterCells.length > 1 ? `${sim.duty[0].toFixed(0)}% / ${sim.duty[1].toFixed(0)}%` : `${sim.duty[0].toFixed(0)}%`],
+    ['Energy in', `${sim.energy.toFixed(0)} J`],
+    ['Hottest cell', lastLog ? `${lastLog.tmax.toFixed(1)} °C` : '–'],
+    ['Beam 1 dT/dt', `${rate.toFixed(3)} K/s`],
+    ['Ambient', `${sim.Ta.toFixed(2)} °C`],
+  ]);
+  $('faultBadge').classList.toggle('fault', sim.fault);
+  $('faultText').textContent = sim.fault ? `OVER-TEMP FAULT (≥${params.trip} °C): heaters off, fan 100%` : (sim.replay ? `Replaying ${sim.replay.exp.file}` : 'OK');
+  if (sim.rms) kv($('rmsKV'), sim.rms.rms.map((v, k) => [`Beam ${k + 1} RMS / peak error`, `${v.toFixed(2)} / ${sim.rms.peak[k].toFixed(1)} K`]));
+  document.querySelectorAll('.replayOnly').forEach(el => el.classList.toggle('hidden', !sim.replay));
+}
+
+function setBoard(key, keepRes) {
+  cfg.board = key;
+  document.querySelectorAll('#boardSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === key));
+  if (!keepRes) { cfg.resOhm = key === 'single' ? 10 : 15; $('rRes').value = cfg.resOhm; }
+  document.querySelectorAll('.h2only').forEach(el => el.classList.toggle('hidden', key !== 'dual'));
+  rebuild();
+}
+function rebuild() {
+  model = buildModel(cfg.board, cfg.dx);
+  buildTiles(); buildGeoTable(); updateElec();
+  reset();
+}
+function reset() {
+  sim = newSim(model);
+  updateConvection(model, sim);
+  readSensors(model, sim, 1e9);
+  render();
+}
+function setMode(mode) {
+  cfg.mode = mode;
+  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === mode));
+  $('manualBox').classList.toggle('hidden', mode !== 'manual');
+  $('pidBox').classList.toggle('hidden', mode !== 'pid');
+  $('replayBox').classList.toggle('hidden', mode !== 'replay');
+  if (mode !== 'replay' && sim.replay) { sim.replay = null; sim.rms = null; $('rmsKV').innerHTML = ''; }
+  sim.pid.forEach(p => { p.i = 0; p.prev = null; });
+}
+function startReplay() {
+  const id = $('expSel').value, e = EXP[id];
+  cfg.resOhm = e.resistor_ohm; $('rRes').value = e.resistor_ohm;
+  if (cfg.board !== e.board) { cfg.board = e.board; setBoard(e.board, true); }
+  const rp = makeReplay(id, $('expOffset').checked, $('expAmb').checked);
+  cfg.Ta = +rp.Ta0.toFixed(2); $('tAmb').value = cfg.Ta;
+  reset(); updateElec();
+  sim.replay = rp; sim.Ta = rp.Ta0; sim.rms = null; $('rmsKV').innerHTML = '';
+  running = true; $('runBtn').textContent = 'Pause';
+}
+
+function exportCsv() {
+  const head = 't_ms,t_sec,ambient_c,beam1_c,beam2_c,beam3_c,beam4_c,beam5_c,fan_rpm,heater1_pwm,heater2_pwm,fan_pwm,heater1_w,heater2_w,max_cell_c';
+  const lines = sim.log.map(e => [Math.round(e.t * 1000), e.t.toFixed(3), e.Ta.toFixed(2), ...e.s.map(v => v.toFixed(2)), 0,
+    e.d[0].toFixed(0), e.d[1].toFixed(0), e.fan, e.P[0].toFixed(3), e.P[1].toFixed(3), e.tmax.toFixed(2)].join(','));
+  const blob = new Blob([head + '\n' + lines.join('\n') + '\n'], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `pcb_sim_${cfg.board}_${cfg.resOhm}ohm.csv`; a.click(); URL.revokeObjectURL(a.href);
+}
+
+function render() { drawMap(); drawProfile(); drawHist(); updateReadouts(); }
+
+let lastFrame = performance.now(), simDebt = 0;
+function frame(now, budgetMs = 14) {
+  const frameDt = Math.min(budgetMs > 14 ? 1 : 0.1, (now - lastFrame) / 1000); lastFrame = now;
+  if (running) {
+    simDebt += frameDt * cfg.speed;
+    const t0 = performance.now();
+    while (simDebt >= TELEMETRY_DT && performance.now() - t0 < budgetMs) {
+      tick(model, sim); simDebt -= TELEMETRY_DT;
+      if (sim.replay && sim.t >= sim.replay.tEnd) {
+        running = false; $('runBtn').textContent = 'Run'; sim.rms = computeRms(sim); simDebt = 0; break;
+      }
+    }
+    if (cfg.speed > 1e6 || simDebt > 2) simDebt = Math.min(simDebt, 2);
+  }
+  render();
+}
+function loop(now) { frame(now); requestAnimationFrame(loop); }
+// keep running when animation frames are throttled (background/hidden view)
+setInterval(() => { const now = performance.now(); if (now - lastFrame > 250) frame(now, 200); }, 100);
+
+// wiring
+document.querySelectorAll('#boardSeg button').forEach(b => b.onclick = () => setBoard(b.dataset.v));
+document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => setMode(b.dataset.v));
+$('rRes').oninput = () => { cfg.resOhm = Math.max(0.1, +$('rRes').value || 0.1); updateElec(); };
+$('vSup').oninput = () => { cfg.vSup = +$('vSup').value || 0; updateElec(); };
+$('rSer').oninput = () => { cfg.rSer = Math.max(0, +$('rSer').value || 0); updateElec(); };
+$('rSrc').oninput = () => { cfg.rSrc = Math.max(0, +$('rSrc').value || 0); updateElec(); };
+$('iFan').oninput = () => { cfg.iFan = Math.max(0, +$('iFan').value || 0); updateElec(); };
+for (const k of [1, 2]) $('d' + k).oninput = () => { cfg.duty[k - 1] = +$('d' + k).value; $('d' + k + 'o').textContent = cfg.duty[k - 1] + '%'; };
+$('fan').oninput = () => { cfg.fan = +$('fan').value; $('fano').textContent = cfg.fan + '%'; };
+$('tAmb').onchange = () => { cfg.Ta = +$('tAmb').value; if (!sim.replay) reset(); };
+$('speed').onchange = () => { cfg.speed = +$('speed').value; };
+$('res').onchange = () => { cfg.dx = +$('res').value; const rp = sim.replay; rebuild(); if (rp) startReplay(); };
+$('cmap').onchange = () => { cfg.cmapFixed = $('cmap').value === 'fixed'; };
+$('runBtn').onclick = () => { running = !running; $('runBtn').textContent = running ? 'Pause' : 'Run'; };
+$('resetBtn').onclick = () => { const rp = sim.replay; reset(); if (rp) startReplay(); };
+$('clearFault').onclick = () => { sim.fault = false; };
+$('csvBtn').onclick = exportCsv;
+$('expRun').onclick = startReplay;
+document.querySelectorAll('[data-p]').forEach(el => el.onchange = () => {
+  params[el.dataset.p] = (+el.value) * (+(el.dataset.s || 1));
+  updateProps(model); updateConvection(model, sim); buildGeoTable();
+});
+$('expSel').innerHTML = Object.entries(EXP).map(([k, e]) => `<option value="${k}">${e.file}: ${e.board}, 2×${e.resistor_ohm} Ω</option>`).join('');
+$('expSel').onchange = () => { $('expDesc').textContent = EXP[$('expSel').value].description; };
+$('expSel').onchange();
+const histCv = $('hist');
+histCv.onmousemove = (ev) => { const r = histCv.getBoundingClientRect(); hover = ev.clientX - r.left; };
+histCv.onmouseleave = () => { hover = null; };
+
+setBoard('single');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

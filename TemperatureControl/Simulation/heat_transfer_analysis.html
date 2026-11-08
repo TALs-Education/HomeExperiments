@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heater Heat Paths</title>
+<style>
+:root {
+  --bg: #f6f6f3; --panel: #ffffff; --ink: #1d2330; --muted: #646c7a; --line: #dcdfe5;
+  --accent: #d9480f; --hot: #e03131; --warm: #f08c00; --cool: #1971c2; --cu: #c4813a; --mask: #2f6b45;
+  --fr4: #d8cfa6; --air: #eef3f8; --code: #f1f3f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1a1e26; --ink: #e5e7eb; --muted: #959cab; --line: #2c323d;
+    --accent: #ff7a3d; --air: #18202b; --code: #222833; --fr4: #8d8462;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1a1e26; --ink: #e5e7eb; --muted: #959cab; --line: #2c323d;
+  --accent: #ff7a3d; --air: #18202b; --code: #222833; --fr4: #8d8462;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 24px 16px 60px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 20px; margin: 40px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 16px; margin: 22px 0 6px; }
+.lead { color: var(--muted); margin: 0 0 18px; max-width: 820px; }
+p { max-width: 860px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 14px 0; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.kpi .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.kpi .n { color: var(--muted); font-size: 12.5px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+td.num { text-align: right; white-space: nowrap; }
+.eq { font-family: "Cambria Math", "STIX Two Math", Georgia, serif; font-size: 17px; background: var(--code); border-radius: 8px; padding: 10px 14px; margin: 8px 0; overflow-x: auto; white-space: nowrap; }
+.eq .c { font-family: system-ui, sans-serif; font-size: 13px; color: var(--muted); margin-left: 14px; }
+var { font-style: italic; }
+.note { color: var(--muted); font-size: 13.5px; }
+.flag { border-left: 4px solid var(--warm); padding: 8px 12px; background: var(--panel); border-radius: 0 8px 8px 0; margin: 12px 0; }
+.flag.red { border-color: var(--hot); }
+.params input { width: 90px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); font: inherit; text-align: right; }
+svg text { font-family: system-ui, sans-serif; }
+.svgwrap { overflow-x: auto; }
+canvas { display: block; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; margin: 6px 0 2px; }
+.bar div { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.toc { columns: 2; font-size: 14px; }
+.toc a { color: var(--accent); text-decoration: none; }
+@media (max-width: 640px) { .toc { columns: 1; } .eq { font-size: 15px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Heated PCB Beam: Heat Transfer Paths and Equations</h1>
+<p class="lead">Where the heater power goes, element by element: from the resistive film in the 2512 resistors, through the solder joints, copper and vias, along the beam, and out of every surface by convection and radiation. Geometry comes from the V02 (single) and V01 (dual) gerbers. Values are engineering estimates, cross-checked against the calibrated 2D model and the <code>Setup2_10Ohm</code> log. Edit the parameters in §1 and every number on this page updates.</p>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="card toc">
+  <a href="#params">1. Parameters</a><br>
+  <a href="#geometry">2. Geometry, mask and exposed metal</a><br>
+  <a href="#section">3. Cross-section and heat path</a><br>
+  <a href="#network">4. Thermal network</a><br>
+  <a href="#elements">5. Element-by-element equations</a><br>
+  <a href="#surfaces">6. Surface losses: mask, metal, bare FR4</a><br>
+  <a href="#beam">7. Beam as a fin</a><br>
+  <a href="#parasitic">8. Parasitic paths to the frame</a><br>
+  <a href="#budget">9. Energy budget</a><br>
+  <a href="#ladder">10. Temperature ladder and part stress</a><br>
+  <a href="#full">11. Full governing equations</a><br>
+  <a href="#transient">12. Heat capacities and time constants</a>
+</div>
+
+<h2 id="params">1. Parameters</h2>
+<p>Default operating point: single-heater board (V02), 2 × 10 Ω, 100% PWM, steady state. With the fitted supply losses that is 1.107 W. The measured temperatures come from <code>Setup2_10Ohm.txt</code> at the end of the 100% step, with sensor offsets zeroed.</p>
+<div class="grid2 params">
+  <div class="card"><table id="ptA"></table></div>
+  <div class="card"><table id="ptB"></table></div>
+</div>
+<h3>Parts that matter thermally (from the BOM)</h3>
+<div class="card"><table>
+  <tr><th>Part</th><th>Where</th><th>Relevant ratings</th><th>Effect in this analysis</th></tr>
+  <tr><td>Bourns CRM2512-FX-10R0ELF (×2)</td><td>Single heater (V02), bottom</td><td>10 Ω 1%, 2 W at 70 °C, derated linearly to 0 at 155 °C</td><td>Heat source; rating check in §10</td></tr>
+  <tr><td>Stackpole RMCF2512FT15R0 (×4)</td><td>Dual heater (V01), 2 per heater</td><td>15 Ω 1%, 1 W at 70 °C, same derating</td><td>Heat source, 2 × 30 Ω heaters</td></tr>
+  <tr><td>AO3400A (×2)</td><td>Controller board, low-side switch per heater</td><td>R<sub>DS(on)</sub> ≤ 32 mΩ at V<sub>GS</sub> = 4.5 V (R4 Minima drives 5 V)</td><td>≈ 30 mΩ of the fitted 0.25 Ω per-heater loss; dissipates &lt; 2 mW</td></tr>
+  <tr><td>Littelfuse NANOSMDC075F-2</td><td>Controller board, supply input</td><td>750 mA hold, 0.09–0.30 Ω, max 85 °C</td><td>Part of the fitted 1.0 Ω shared source resistance</td></tr>
+  <tr><td>USB A–C cable 0.9 m, Uno R4 Minima</td><td>Supply</td><td>USB 5 V; cable and board input path</td><td>Rest of the shared source resistance</td></tr>
+  <tr><td>MCP9701AT-E/TT (×6)</td><td>5 on the beam, 1 ambient</td><td>SOT-23, −10…+125 °C, 19.5 mV/°C, θ<sub>JA</sub> ≈ 336 K/W</td><td>Reads the top copper; 125 °C trip = sensor's upper limit</td></tr>
+  <tr><td>Murata GCM188L81H104KA57D (×5)</td><td>Sensor decoupling, in the frame</td><td>0603, X8L, rated to 150 °C</td><td>Sits in the cool frame (≈ 35–45 °C), no concern</td></tr>
+  <tr><td>40 × 40 mm 5 V PWM fan</td><td>Optional forced cooling</td><td>≈ 200 mA at full speed</td><td>Raises h; its current also sags the shared supply</td></tr>
+</table></div>
+
+<h2 id="geometry">2. Geometry, solder mask and exposed metal</h2>
+<p>Both sides drawn from the gerbers, rotated so the beam runs left to right with Heater 1 on the left. Solder mask covers all copper and all FR4 except the openings shown in silver. The heater and beam copper are fully mask-covered and every via is tented, so these surfaces radiate like the mask (ε ≈ 0.9), not like bare metal.</p>
+<div class="card">
+  <div class="note" style="margin-bottom:4px"><b>Top side</b> (sensors)</div>
+  <canvas id="topView" height="300"></canvas>
+  <div class="note" style="margin:10px 0 4px"><b>Bottom side</b> (heater resistors), seen through the board from the top</div>
+  <canvas id="botView" height="300"></canvas>
+  <div class="legend">
+    <span><i style="background:var(--cu)"></i>copper under mask</span>
+    <span><i style="background:#e9ecef;border:1px solid #868e96"></i>mask opening (exposed metal / solder)</span>
+    <span><i style="background:var(--mask)"></i>FR4 + mask, no copper</span>
+    <span><i style="background:transparent;border:1px solid var(--muted)"></i>routed slot (bare FR4 wall)</span>
+    <span><i style="background:#4dd4ff"></i>2512 heater resistor footprint</span>
+    <span><i style="background:#222"></i>via (tented)</span>
+  </div>
+</div>
+<table id="geoT" class="card" style="display:table"></table>
+
+<h2 id="section">3. Cross-section through the heater and beam start</h2>
+<p>A section along the beam axis through the left resistor column (x = 7.62 mm). The sensor sits at x = 10.16 mm and is projected into the section. The vertical scale is about 2× horizontal so thin layers stay visible; copper and mask are drawn thicker still.</p>
+<div class="card svgwrap">
+<svg id="xsec" viewBox="0 0 960 420" width="100%" style="min-width:760px"></svg>
+<div class="legend">
+  <span><i style="background:var(--hot)"></i>conduction path</span>
+  <span><i style="background:var(--warm)"></i>convection + radiation to air</span>
+  <span><i style="background:var(--cool)"></i>to the frame (parasitic)</span>
+</div>
+</div>
+<p><b>Read the section bottom-up.</b> The resistive thick film is on the chip's upper face, which faces <i>away</i> from the PCB once the part sits on the bottom side. Film heat therefore crosses the alumina body (k ≈ 24 W/m·K) sideways to the two wrap-around terminations, goes through the solder joints into the bottom copper pad, then up through the vias (and, far less, the FR4) into the top copper. On top it reaches Beam 1, then spreads along both copper layers of the beam. Every mask-covered face loses heat to the air; the exposed resistor body does too.</p>
+
+<h2 id="network">4. Thermal network</h2>
+<p>Lumped resistances in K/W at the operating point. Conductive links are fixed by geometry; surface links depend on temperature through h<sub>c</sub>(ΔT) and h<sub>r</sub>(T). The beam is a distributed fin (§7), drawn here as its input resistance.</p>
+<div class="card svgwrap"><svg id="net" viewBox="0 0 980 470" width="100%" style="min-width:800px"></svg></div>
+
+<h2 id="elements">5. Element-by-element equations</h2>
+<div id="elems"></div>
+
+<h2 id="surfaces">6. Surface losses: mask-covered, exposed metal, bare FR4</h2>
+<div id="surf"></div>
+
+<h2 id="beam">7. The beam as a fin</h2>
+<div id="fin"></div>
+
+<h2 id="parasitic">8. Parasitic paths to the frame</h2>
+<div id="para"></div>
+
+<h2 id="budget">9. Steady-state energy budget</h2>
+<p>Where the heater power ends up, taken from the calibrated 2D finite-difference model in <code>pcb_heater_sim.html</code> (0.635 mm mesh, 900 s at constant duty). The model's input power and total surface loss agree to 0.1 mW.</p>
+<div id="budgetBox"></div>
+
+<h2 id="ladder">10. Temperature ladder and component stress</h2>
+<div id="ladderBox"></div>
+
+<h2 id="full">11. Full governing equations</h2>
+<div id="fullEq"></div>
+
+<h2 id="transient">12. Heat capacities and time constants</h2>
+<div id="trans"></div>
+
+<p class="note" style="margin-top:40px">Sources: gerbers <code>PCB/Heating Element/V01, V02</code>; <code>HEATED PCB BEAM.docx</code>; setup BOM; logs <code>Experiments Results/Setup2_10Ohm.txt</code> and <code>Setup1.txt</code>; calibration from <code>pcb_heater_sim.html</code>. Part ratings come from the Stackpole RMCF/RMCP, Alpha &amp; Omega AO3400A, Littelfuse nanoSMDC and Microchip MCP9701A datasheets. The 2512 body dimensions (6.35 × 3.2 × 0.55 mm, 0.6 mm terminations) and the material values are typical figures, not measured.</p>
+</div>
+
+<script src="pcb_geometry.js"></script>
+<script>
+'use strict';
+const GEO = window.PCB_GEOMETRY;
+const SIGMA = 5.670374e-8;
+const $ = (id) => document.getElementById(id);
+const f = (v, d = 2) => (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-3 && v !== 0)) ? v.toExponential(2) : v.toFixed(d);
+
+// ------------------------------------------------------------------ parameters
+const P = {
+  // operating point
+  Pw:      { v: 1.107, u: 'W',     d: 'Heater power (2 resistors)', g: 'A' },
+  Ta:      { v: 25.3,  u: '°C',    d: 'Ambient', g: 'A' },
+  TB1:     { v: 98.5,  u: '°C',    d: 'Beam 1 measured (top, over heater)', g: 'A' },
+  thEdge:  { v: 64.5,  u: 'K',     d: 'θ at heater-pad edge (fin fit)', g: 'A' },
+  Tbeam:   { v: 56.4,  u: '°C',    d: 'Beam mean temperature (2D model)', g: 'A' },
+  Tfr4:    { v: 46.5,  u: '°C',    d: 'FR4 inside slot ring, mean (2D model)', g: 'A' },
+  h50:     { v: 14,    u: 'W/m²K', d: 'Convection h at ΔT = 50 K (calibrated)', g: 'A' },
+  hn:      { v: 0.25,  u: '',      d: 'Exponent n in h ∝ ΔTⁿ', g: 'A' },
+  epsM:    { v: 0.90,  u: '',      d: 'Emissivity, solder mask / FR4 / overcoat', g: 'A' },
+  epsCu:   { v: 0.05,  u: '',      d: 'Emissivity, bare tin/solder/ENIG', g: 'A' },
+  mFit:    { v: 59.5,  u: '1/m',   d: 'Fin parameter fitted to B2–B5', g: 'A' },
+  // materials and geometry
+  tPcb:    { v: 0.8,   u: 'mm',    d: 'FR4 thickness', g: 'B' },
+  kxy:     { v: 0.8,   u: 'W/mK',  d: 'FR4 k in-plane', g: 'B' },
+  kz:      { v: 0.3,   u: 'W/mK',  d: 'FR4 k through-plane', g: 'B' },
+  tCu:     { v: 35,    u: 'µm',    d: 'Copper per side (1 oz)', g: 'B' },
+  kCu:     { v: 390,   u: 'W/mK',  d: 'Copper k', g: 'B' },
+  tMask:   { v: 20,    u: 'µm',    d: 'Solder mask thickness', g: 'B' },
+  kMask:   { v: 0.25,  u: 'W/mK',  d: 'Solder mask k', g: 'B' },
+  kAl:     { v: 24,    u: 'W/mK',  d: 'Alumina (96%) k, resistor body', g: 'B' },
+  tSol:    { v: 50,    u: 'µm',    d: 'Solder joint thickness', g: 'B' },
+  kSol:    { v: 58,    u: 'W/mK',  d: 'Solder (SAC305) k', g: 'B' },
+  gap:     { v: 50,    u: 'µm',    d: 'Body stand-off gap (air)', g: 'B' },
+  kAir:    { v: 0.029, u: 'W/mK',  d: 'Air k (≈60 °C)', g: 'B' },
+  viaD:    { v: 0.35,  u: 'mm',    d: 'Via drill', g: 'B' },
+  viaT:    { v: 25,    u: 'µm',    d: 'Via barrel plating', g: 'B' },
+  nVia:    { v: 17,    u: '',      d: 'Vias in heater copper (gerber)', g: 'B' },
+  bridgeL: { v: 3.0,   u: 'mm',    d: 'Typical trace length across a slot bridge', g: 'B' },
+  wRing:   { v: 0.9,   u: 'mm',    d: 'FR4 ring width, pad copper → slots', g: 'B' },
+  nBridge: { v: 4,     u: '',      d: 'FR4 bridges from the pad region to the frame', g: 'B' },
+};
+const p = (k) => P[k].v;
+
+function buildParamTables() {
+  for (const g of ['A', 'B']) {
+    $('pt' + g).innerHTML = '<tr><th>Parameter</th><th style="text-align:right">Value</th><th></th></tr>' +
+      Object.entries(P).filter(([, o]) => o.g === g).map(([k, o]) =>
+        `<tr><td>${o.d}</td><td class="num"><input data-k="${k}" type="number" step="any" value="${o.v}"></td><td class="note">${o.u}</td></tr>`).join('');
+  }
+  document.querySelectorAll('.params input').forEach(el => el.oninput = () => { const v = parseFloat(el.value); if (isFinite(v)) { P[el.dataset.k].v = v; compute(); } });
+}
+
+// ------------------------------------------------------------------ geometry facts from gerbers
+const G = (() => {
+  const g = GEO.single, gd = GEO.dual;
+  const pad = g.pours.find(q => q[2] - q[0] > 9), beam = g.pours.find(q => q[2] - q[0] < 6);
+  const beamEnd = Math.max(...g.pours.filter(q => q[2] - q[0] < 6).map(q => q[3]));
+  const res = g.heaters[0].resistors;
+  const perim = (pts) => { let s = 0; for (let i = 1; i < pts.length; i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return s; };
+  const area = (pts) => { let s = 0; for (let i = 1; i < pts.length; i++) s += pts[i - 1][0] * pts[i][1] - pts[i][0] * pts[i - 1][1]; return Math.abs(s) / 2; };
+  const slotPerim = g.cutouts.reduce((s, c) => s + perim(c), 0);
+  const boardA = area(g.board) - g.cutouts.reduce((s, c) => s + area(c), 0);
+  // mask openings inside the heated zone (exposed metal)
+  const inZone = (x, y) => x > 4 && x < 16.5 && y > 9.5 && y < 59;
+  let openTop = 0, openBot = 0;
+  for (const q of g.mask_top) if (q[0] === 'F' && inZone(q[2], q[3])) openTop += q[4] === 'C' ? Math.PI * q[5] * q[5] / 4 : q[5] * q[6];
+  for (const q of g.mask_bottom) if (q[0] === 'F' && inZone(q[2], q[3])) openBot += q[4] === 'C' ? Math.PI * q[5] * q[5] / 4 : q[5] * q[6];
+  return {
+    padW: pad[2] - pad[0], padL: pad[3] - pad[1], padY0: pad[1], padY1: pad[3], beamW: beam[2] - beam[0],
+    beamL: beamEnd - pad[3], beamTipFromCentre: beamEnd - g.heaters[0].center[1],
+    resPad: res[0].pad_size, resPitch: res[0].pads[1][1] - res[0].pads[0][1], resRect: res[0].rect,
+    sensors: g.sensors.map(s => s.center[1] - g.heaters[0].center[1]),
+    slots: g.cutouts.length, slotPerim, boardA, openTop, openBot,
+    viasBeam: g.drills.filter(d => Math.abs(d[2] - 0.35) < 0.01 && d[0] > 7.6 && d[0] < 12.8 && d[1] > 20.3 && d[1] < 58).length,
+    stripW: 0.635, // FR4 between beam copper edge (7.62) and slot edge (6.985)
+    dualSpacing: gd.heaters[1].center[1] - gd.heaters[0].center[1],
+  };
+})();
+
+// ------------------------------------------------------------------ physics helpers
+const hc = (dT) => p('h50') * Math.pow(Math.max(dT, 0.5) / 50, p('hn'));
+const hr = (T, eps) => { const a = T + 273.15, b = p('Ta') + 273.15; return eps * SIGMA * (a * a + b * b) * (a + b); };
+const R = {}; // results bag
+const kCu_ratio = () => p('kCu') * p('tCu') / p('kxy');   // FR4 thickness [µm] with the same sheet conductance as one copper layer
+
+function compute() {
+  const Ta = p('Ta'), Pw = p('Pw'), Pr = Pw / 2;
+  const tPcb = p('tPcb') * 1e-3, tCu = p('tCu') * 1e-6, kCu = p('kCu');
+  // resistor 2512 (generic)
+  const Lr = 6.35e-3, Wr = 3.2e-3, Tr = 0.55e-3, Lt = 0.6e-3, Lb = Lr - 2 * Lt;
+  const Aal = Wr * Tr;
+  R.intPeak = Lb / (8 * p('kAl') * Aal); R.intMean = Lb / (12 * p('kAl') * Aal);
+  const Aj = Wr * Lt;
+  R.joint = p('tSol') * 1e-6 / (p('kSol') * Aj);
+  R.gap = p('gap') * 1e-6 / (p('kAir') * Wr * Lb);
+  R.gapShare = (1 / R.gap) / (1 / R.gap + 1 / R.intMean);
+  // vertical
+  const d = p('viaD') * 1e-3, tp = p('viaT') * 1e-6;
+  R.Abarrel = Math.PI / 4 * (d * d - (d - 2 * tp) ** 2);
+  R.via1 = tPcb / (kCu * R.Abarrel); R.vias = R.via1 / p('nVia');
+  const Apad = G.padW * G.padL * 1e-6;
+  R.fr4z = tPcb / (p('kz') * Apad);
+  R.vert = 1 / (1 / R.vias + 1 / R.fr4z);
+  // sheet
+  R.Gsheet = kCu * 2 * tCu + p('kxy') * tPcb;
+  R.Rsq = 1 / R.Gsheet; R.Rsq1 = 1 / (kCu * tCu);
+  R.spread = R.Rsq * (G.padL / (2 * G.padW));
+  // mask
+  R.maskRpp = p('tMask') * 1e-6 / p('kMask');
+  // surfaces at pad temperature
+  const dTpad = p('TB1') - Ta;
+  R.hcPad = hc(dTpad); R.hrPad = hr(p('TB1'), p('epsM')); R.hrPadCu = hr(p('TB1'), p('epsCu'));
+  R.Gpad = 2 * Apad * (R.hcPad + R.hrPad);
+  R.Qpad = R.Gpad * dTpad;
+  // resistor exposed surfaces (film face + sides), temperature ≈ pad + mean internal rise
+  R.Tres = p('TB1') + 2 + Pr * R.intMean;
+  R.Ares = Lr * Wr + 2 * (Lr + Wr) * Tr;
+  R.Gres1 = R.Ares * (hc(R.Tres - Ta) + hr(R.Tres, p('epsM')));
+  R.Qres = 2 * R.Gres1 * (R.Tres - Ta);
+  // fin
+  const w = G.beamW * 1e-3, L = G.beamL * 1e-3, ws = G.stripW * 1e-3;
+  R.Gp = R.Gsheet * w;                                        // G' = Σ k t w   [W·m/K]
+  const dTb = p('Tbeam') - Ta;
+  R.hBeam = hc(dTb) + hr(p('Tbeam'), p('epsM'));
+  R.mCu = Math.sqrt(R.hBeam * 2 * w / R.Gp);
+  R.mStrip = Math.sqrt(R.hBeam * 2 * (w + 2 * ws) / R.Gp);
+  R.mFit = p('mFit');
+  R.hPfit = R.mFit * R.mFit * R.Gp;
+  R.Pfit = R.hPfit / R.hBeam;
+  const Gfin = (m) => m * R.Gp * Math.tanh(m * L);
+  R.GfinCu = Gfin(R.mCu); R.GfinFit = Gfin(R.mFit);
+  R.etaFit = Math.tanh(R.mFit * L) / (R.mFit * L);
+  R.Qbeam = p('thEdge') * R.GfinFit;
+  R.tipRatio = 1 / Math.cosh(R.mFit * L);
+  // FR4 without copper: fin behaviour
+  const hF = hc(p('Tfr4') - Ta) + hr(p('Tfr4'), p('epsM'));
+  R.hF = hF;
+  R.mF = Math.sqrt(2 * hF / (p('kxy') * tPcb));
+  R.GpEdge = Math.sqrt(2 * hF * p('kxy') * tPcb);                 // per metre of copper edge, infinite FR4 fin
+  R.padFreePerim = (2 * G.padW + 2 * G.padL - G.beamW) * 1e-3;
+  R.GedgePad = R.GpEdge * R.padFreePerim;
+  R.etaStrip = Math.tanh(R.mF * ws) / (R.mF * ws);
+  // slot walls (bare FR4 edges)
+  R.Awall = G.slotPerim * 1e-3 * tPcb;
+  R.Aface = 2 * G.boardA * 1e-6;
+  R.Qwall = R.Awall * 0.35 * hF * (p('Tfr4') - Ta);            // ~35% of the wall length borders the warm inner zone
+  // parasitic conduction across slot bridges
+  const Lbr = p('bridgeL') * 1e-3;
+  R.Gtr6 = kCu * 0.1524e-3 * tCu / Lbr; R.Gtr10 = kCu * 0.254e-3 * tCu / Lbr;
+  R.Gtraces = 15 * R.Gtr6 + 2 * R.Gtr10;
+  R.Gbridge = p('kxy') * tPcb * 2.54e-3 / 2.54e-3;
+  // the frame is not at ambient: each link is in series with its spreading into the frame.
+  // trace continuing in the frame = fin of copper + FR4 within ±1/m_FR4:  G = √(h·P_eff·k_Cu·A), P_eff = 4/m_FR4
+  const trFin = (wtr) => Math.sqrt(hF * (4 / R.mF) * kCu * wtr * tCu);
+  const ser = (a, b) => 1 / (1 / a + 1 / b);
+  R.Gtr6s = ser(R.Gtr6, trFin(0.1524e-3)); R.Gtr10s = ser(R.Gtr10, trFin(0.254e-3));
+  R.Gplate = 2 * Math.PI * p('kxy') * tPcb / Math.log((1 / R.mF) / 1.27e-3);   // bridge end spreading into the FR4 frame
+  R.Gbridges = ser(R.Gbridge, R.Gplate);
+  // heater-pad region only (the beam's own bridges/traces are inside the fitted fin m)
+  R.Gneck = 3 * R.Gtr6s + 2 * R.Gtr10s + p('nBridge') * R.Gbridges;
+  // FR4 ring between the pad copper and the slots (truncated fin, width w_ring)
+  R.wRing = p('wRing') * 1e-3;
+  R.etaRing = Math.tanh(R.mF * R.wRing) / (R.mF * R.wRing);
+  R.Gring = R.padFreePerim * R.GpEdge * Math.tanh(R.mF * R.wRing);
+  // overall analytic conductance, referenced to the Beam 1 temperature rise
+  R.Gtot = R.Gpad + 2 * R.Gres1 + R.GfinFit * (p('thEdge') / dTpad) + R.Gring + R.Gneck;
+  R.Rtot = 1 / R.Gtot; R.Rmeas = dTpad / Pw;
+  // ladder
+  R.dTvert = (Pw * 0.5) * R.vert;
+  R.Tbot = p('TB1') + R.dTvert;
+  R.Tjoint = R.Tbot + (Pr / 2) * R.joint;
+  R.TfilmMean = R.Tjoint + Pr * R.intMean;
+  R.TfilmPeak = R.Tjoint + Pr * R.intPeak;
+  // capacities
+  const rcF = 1900 * 1150, rcC = 8960 * 385;
+  R.Cres = 3.9e3 * Lr * Wr * Tr * 880;
+  R.Cpad = Apad * (tPcb * rcF + 2 * tCu * rcC) + 2 * R.Cres;
+  R.Cp = w * (tPcb * rcF + 2 * tCu * rcC);                        // J/(K·m)
+  R.alpha = R.Gp / R.Cp;
+  R.tauLoss = R.Cp / R.hPfit;
+  R.tauDiff = L * L / R.alpha;
+  R.tauRes = R.Cres * (R.intMean + R.joint / 2);
+  R.tauSensor = 0.008e-3 * 800 * 120;                           // SOT-23 ≈ 8 mg, c ≈ 0.8 J/gK, ≈120 K/W leads+pad
+  render();
+}
+
+// ------------------------------------------------------------------ rendering
+// short value cells are right-aligned numbers; longer text (notes) stays left-aligned
+function row(cells) { return '<tr>' + cells.map((c, i) => `<td${i > 0 && String(c).replace(/<[^>]+>/g, '').length < 26 ? ' class="num"' : ''}>${c}</td>`).join('') + '</tr>'; }
+function table(head, rows) { return `<table><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr>${rows.map(row).join('')}</table>`; }
+
+function render() {
+  const Ta = p('Ta'), Pw = p('Pw'), Pr = Pw / 2, dTpad = p('TB1') - Ta;
+  $('kpis').innerHTML = [
+    [`${f(Pw, 2)} W`, 'heater power (2 × 10 Ω)'],
+    [`${f(R.Rmeas, 0)} K/W`, 'measured θ(B1)/P, heater → ambient'],
+    [`${f(1000 / R.mFit, 1)} mm`, 'beam decay length 1/m (fitted)'],
+    [`${f(R.TfilmPeak, 0)} °C`, 'estimated resistor film hot spot'],
+    [`${f(R.vert, 1)} K/W`, 'bottom → top through vias ‖ FR4'],
+    [`≈ 2 : 1`, 'convection : radiation'],
+  ].map(([v, n]) => `<div class="kpi"><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
+
+  $('geoT').innerHTML = '<tr><th>Feature (gerber)</th><th style="text-align:right">Value</th><th>Thermal role</th></tr>' + [
+    ['Heater copper area, both layers', `${f(G.padW)} × ${f(G.padL, 3)} mm`, 'Heat spreader under the resistors; Beam 1 sits at its centre'],
+    ['Beam copper, both layers', `${f(G.beamW)} mm wide, ${f(G.beamL)} mm from pad edge`, 'Main axial conduction path (fin)'],
+    ['FR4 strip beside the beam (no copper)', `${f(G.stripW, 3)} mm each side`, 'Adds surface but almost no conduction'],
+    ['Heater resistors (bottom)', `2 × 2512, pads ${G.resPad[0]} × ${G.resPad[1]} mm, pitch ${f(G.resPitch)} mm`, 'Heat source; outer pads at y = 12.44, inner at 18.04 mm'],
+    ['Vias in heater copper', `${p('nVia')} × ${p('viaD')} mm (some in the inner resistor pads)`, 'Bottom → top coupling'],
+    ['Vias along the beam', `${G.viasBeam} × 0.35 mm`, 'Keep top and bottom beam copper at the same temperature'],
+    ['Mask openings in heated zone', `top ${f(G.openTop, 1)} mm², bottom ${f(G.openBot, 1)} mm²`, 'Only sensor and resistor pads, all covered by parts and solder'],
+    ['Routed slots', `${G.slots}, total wall length ${f(G.slotPerim, 0)} mm`, 'Thermal isolation; walls are bare machined FR4'],
+    ['Traces leaving heated copper', '15 × 0.152 mm top, 2 × 0.254 mm bottom', 'Parasitic conduction to frame/connectors'],
+    ['Sensor positions from heater centre', G.sensors.map(v => f(v)).join(' / ') + ' mm', 'B1 on the pad, B2–B5 on the beam'],
+  ].map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="note">${r[2]}</td></tr>`).join('');
+
+  drawSection(); drawNetwork();
+
+  // ---------------- elements
+  $('elems').innerHTML = `
+<h3>E1. Joule heating in the resistors</h3>
+<div class="eq">P<sub>k</sub> = <var>D</var><sub>k</sub> · I<sup>2</sup> · 2R, &nbsp; I = V<sub>s</sub> / (2R + R<sub>FET</sub> + n·R<sub>src</sub>)<span class="c">n = heaters conducting at the same instant (shared supply sag)</span></div>
+<p>At 5.0 V, 2 × 10 Ω (CRM2512-FX-10R0ELF), R<sub>FET</sub> = 0.25 Ω and R<sub>src</sub> = 1.0 Ω (fitted), I = 235 mA and P = ${f(Pw, 3)} W, or ${f(Pr, 3)} W per resistor. That is about 89% of the nominal V²/R = 1.25 W. The heat is generated in the thick-film layer on the chip's outer face.</p>
+<p>The fitted losses are consistent with the BOM. The AO3400A contributes ≤ 32 mΩ, so most of the 0.25 Ω per heater is header, connector and wire resistance. The shared 1.0 Ω is the NANOSMDC075F-2 PTC fuse (0.09–0.30 Ω, rising as it warms) plus the 0.9 m USB cable and the Uno R4's input path. With ±100 ppm/K-class thick film, the resistance rises by less than 1% at the film temperature, so P changes by less than 1%.</p>
+
+<h3>E2. Inside the resistor: film → alumina → terminations</h3>
+<p>The film sits between the two end terminations (active length L<sub>b</sub> ≈ 6.35 − 2 × 0.6 = 5.15 mm) on an alumina body W × T = 3.2 × 0.55 mm. Heat generated uniformly along a bar and removed at both ends gives:</p>
+<div class="eq">ΔT<sub>peak</sub> = P<sub>r</sub> L<sub>b</sub> / (8 k<sub>Al₂O₃</sub> W T), &nbsp; ΔT<sub>mean</sub> = P<sub>r</sub> L<sub>b</sub> / (12 k<sub>Al₂O₃</sub> W T)</div>
+${table(['Quantity', 'Value', 'Note'], [
+  ['R<sub>int,peak</sub>', `${f(R.intPeak, 1)} K/W`, 'film centre → terminations'],
+  ['R<sub>int,mean</sub>', `${f(R.intMean, 1)} K/W`, 'body average'],
+  ['ΔT<sub>peak</sub> at P<sub>r</sub>', `${f(Pr * R.intPeak, 1)} K`, 'the hottest point on the board'],
+])}
+
+<h3>E3. Terminations → solder → bottom pad</h3>
+<div class="eq">R<sub>joint</sub> = t<sub>sol</sub> / (k<sub>sol</sub> A<sub>j</sub>), &nbsp; A<sub>j</sub> = W × L<sub>t</sub> = 3.2 × 0.6 mm²<span class="c">+ termination metallisation (Ag/Ni/Sn, ≈10 µm, negligible)</span></div>
+${table(['Quantity', 'Value', 'Note'], [
+  ['R<sub>joint</sub> (one joint)', `${f(R.joint, 2)} K/W`, '4 joints in total, each carries ≈ P/4'],
+  ['ΔT across a joint', `${f(Pr / 2 * R.joint, 2)} K`, 'negligible'],
+  ['Mask opening per pad', '3.40 × 2.00 mm', 'filled by solder and termination'],
+])}
+
+<h3>E4. Body → board across the stand-off gap</h3>
+<div class="eq">R<sub>gap</sub> = g / (k<sub>air</sub> W L<sub>b</sub>)</div>
+<p>R<sub>gap</sub> = ${f(R.gap, 0)} K/W with g = ${p('gap')} µm. Set against R<sub>int,mean</sub>, the air gap carries only about ${f(R.gapShare * 100, 0)}% of the heat. Nearly everything leaves through the terminations. Flux residue or underfill in the gap would raise that share.</p>
+
+<h3>E5. Bottom pad → top copper (vias ‖ FR4)</h3>
+<div class="eq">R<sub>via</sub> = t<sub>PCB</sub> / (k<sub>Cu</sub> · π/4 · (d<sup>2</sup> − (d − 2t<sub>p</sub>)<sup>2</sup>)), &nbsp; R<sub>vias</sub> = R<sub>via</sub>/N, &nbsp; R<sub>FR4,z</sub> = t<sub>PCB</sub> / (k<sub>z</sub> A<sub>pad</sub>), &nbsp; R<sub>vert</sub> = (R<sub>vias</sub><sup>−1</sup> + R<sub>FR4,z</sub><sup>−1</sup>)<sup>−1</sup></div>
+${table(['Quantity', 'Value', 'Note'], [
+  ['Barrel copper area', `${f(R.Abarrel * 1e6, 4)} mm²`, `d = ${p('viaD')} mm, plating ${p('viaT')} µm`],
+  ['R<sub>via</sub> (one)', `${f(R.via1, 0)} K/W`, 'tented; the hole is mask/air filled'],
+  [`R<sub>vias</sub> (${p('nVia')} parallel)`, `${f(R.vias, 2)} K/W`, 'dominant vertical path'],
+  ['R<sub>FR4,z</sub> over the pad area', `${f(R.fr4z, 1)} K/W`, `k<sub>z</sub> = ${p('kz')} W/mK`],
+  ['R<sub>vert</sub>', `${f(R.vert, 2)} K/W`, `≈ ${f(R.dTvert, 1)} K bottom-to-top drop with ≈ P/2 crossing`],
+])}
+<p>Vias carry about ${f(R.fr4z / (R.fr4z + R.vias) * 100, 0)}% of the vertical heat. Some sit in the inner resistor pads (y = 17.78 mm row), so those joints feed the top layer almost directly. The outer joints (y = 12.44 mm) first spread through the bottom copper to the via rows.</p>
+
+<h3>E6. Spreading in the heater copper (both layers)</h3>
+<div class="eq">R<sub>□</sub> = 1 / (k<sub>Cu</sub> · 2t<sub>Cu</sub> + k<sub>FR4,xy</sub> · t<sub>PCB</sub>), &nbsp; R<sub>spread</sub> ≈ R<sub>□</sub> · L<sub>pad</sub> / (2 W<sub>pad</sub>)</div>
+${table(['Quantity', 'Value', 'Note'], [
+  ['Sheet resistance, both Cu layers + FR4', `${f(R.Rsq, 1)} K/W per square`, `one layer alone: ${f(R.Rsq1, 0)} K/W/□`],
+  ['R<sub>spread</sub> pad centre → beam entry', `${f(R.spread, 1)} K/W`, ''],
+  ['Measured B1 − T(pad edge)', `${f(dTpad - p('thEdge'), 1)} K`, `implies ≈ ${f((dTpad - p('thEdge')) / R.spread, 2)} W flowing into the beam region`],
+])}
+<p>FR4 adds only ${f(p('kxy') * p('tPcb') * 1e-3 / R.Gsheet * 100, 1)}% to the in-plane conductance. The copper does essentially all the spreading.</p>
+
+<h3>E7. Solder mask as a thermal layer</h3>
+<div class="eq">R″<sub>mask</sub> = t<sub>mask</sub> / k<sub>mask</sub> = ${f(R.maskRpp * 1e6, 0)} mm²K/W &nbsp;≪&nbsp; 1/(h<sub>c</sub>+h<sub>r</sub>) = ${f(1e6 / (R.hcPad + R.hrPad), 0)} mm²K/W</div>
+<p>The mask adds ${f(R.maskRpp * (R.hcPad + R.hrPad) * 100, 2)}% to the surface resistance, so it's thermally transparent. Its real effect is optical: it raises emissivity from about ${p('epsCu')} (bare metal) to ${p('epsM')}.</p>
+
+<h3>E8. Sensor coupling (MCP9701AT-E/TT, SOT-23, top side; rated −10…+125 °C)</h3>
+<p>Each sensor sits over beam copper through three pads (mask openings 1.52 × 0.81 mm). Self-heating is I<sub>DD</sub> · V<sub>DD</sub> ≈ 6 µA × 3.3 V ≈ 20 µW. With θ<sub>JA</sub> ≈ 336 K/W (datasheet, SOT-23) that is ≈ 0.007 K, negligible. The sensor reads the top copper under it, with a lag τ ≈ ${f(R.tauSensor, 1)} s (package ≈ 8 mg on ≈ 120 K/W of leads and pad). B1 is on the top layer, about ${f(R.dTvert, 1)} K cooler than the bottom pad under the resistors.</p>`;
+
+  // ---------------- surfaces
+  const dTb = p('Tbeam') - Ta, dTf = p('Tfr4') - Ta;
+  const Lc = 2.5e-3, Lv = 10e-3;
+  const corr = (C, dT, L) => C * Math.pow(dT / L, 0.25);
+  $('surf').innerHTML = `
+<p>Every face sheds heat in parallel by natural convection and by radiation:</p>
+<div class="eq">q″ = h<sub>c</sub>(ΔT) · (T − T<sub>a</sub>) + ε σ (T<sup>4</sup> − T<sub>a</sub><sup>4</sup>) = (h<sub>c</sub> + h<sub>r</sub>)(T − T<sub>a</sub>), &nbsp; h<sub>r</sub> = ε σ (T<sup>2</sup> + T<sub>a</sub><sup>2</sup>)(T + T<sub>a</sub>)</div>
+<div class="eq">h<sub>c</sub> = h<sub>50</sub> (ΔT / 50 K)<sup>n</sup><span class="c">calibrated: h<sub>50</sub> = ${p('h50')} W/m²K, n = ${p('hn')}</span></div>
+<h3>Convection: correlations vs calibration</h3>
+<p>Laminar natural convection in air, h ≈ C (ΔT/L)<sup>1/4</sup>. These small features have short characteristic lengths, so h is higher than the usual 5–10 W/m²K quoted for large boards.</p>
+${table(['Surface / orientation', 'C', 'h at pad ΔT = ' + f(dTpad, 0) + ' K', 'h at beam ΔT = ' + f(dTb, 0) + ' K'], [
+  ['Horizontal, hot face up (L = A/P ≈ 2.5 mm)', '1.32', `${f(corr(1.32, dTpad, Lc), 1)} W/m²K`, `${f(corr(1.32, dTb, Lc), 1)} W/m²K`],
+  ['Horizontal, hot face down (L ≈ 2.5 mm)', '0.59', `${f(corr(0.59, dTpad, Lc), 1)} W/m²K`, `${f(corr(0.59, dTb, Lc), 1)} W/m²K`],
+  ['Vertical board (L = 10 mm feature height)', '1.42', `${f(corr(1.42, dTpad, Lv), 1)} W/m²K`, `${f(corr(1.42, dTb, Lv), 1)} W/m²K`],
+  ['<b>Calibrated model (per face)</b>', '', `<b>${f(hc(dTpad), 1)} W/m²K</b>`, `<b>${f(hc(dTb), 1)} W/m²K</b>`],
+])}
+<p class="note">The calibrated value sits between the up- and down-facing correlations, close to the vertical-plate value. The board's mounting orientation wasn't recorded. A horizontal board with the resistors facing down convects worse from the bottom (resistor) side.</p>
+<h3>Radiation by surface finish</h3>
+${table(['Surface', 'ε', 'h<sub>r</sub> at pad (' + f(p('TB1'), 0) + ' °C)', 'h<sub>r</sub> at beam (' + f(p('Tbeam'), 0) + ' °C)', 'Where on this board'], [
+  ['Solder mask over copper', f(p('epsM')), `${f(hr(p('TB1'), p('epsM')), 1)}`, `${f(hr(p('Tbeam'), p('epsM')), 1)}`, 'All heater and beam copper (both sides); tented vias'],
+  ['Solder mask over bare FR4', f(p('epsM')), `${f(hr(p('TB1'), p('epsM')), 1)}`, `${f(hr(p('Tbeam'), p('epsM')), 1)}`, 'Strips beside the beam, slot bridges, frame'],
+  ['Machined FR4 (slot walls, board edge)', '≈0.9', `${f(hr(p('TB1'), 0.9), 1)}`, `${f(hr(p('Tbeam'), 0.9), 1)}`, `${G.slots} slots, ${f(G.slotPerim, 0)} mm of wall`],
+  ['Resistor overcoat / alumina', '≈0.9', `${f(hr(R.Tres, 0.9), 1)}`, '–', '2 × 2512 bodies on the bottom'],
+  ['Exposed tin / solder / ENIG', f(p('epsCu')), `${f(hr(p('TB1'), p('epsCu')), 2)}`, `${f(hr(p('Tbeam'), p('epsCu')), 2)}`, `Pad openings only: ${f(G.openTop, 1)} mm² top, ${f(G.openBot, 1)} mm² bottom, mostly hidden under parts`],
+])}
+<div class="flag">Radiation is about a third of the total loss here, and that holds only because the copper is mask-covered. With bare copper (ε ≈ 0.05–0.1) most of that third would vanish, and the heater would run roughly 25–40% hotter at the same power. Opening the mask over the beam to "improve" contact would therefore make the beam hotter and change the calibration.</div>
+<h3>Per-region surface loss coefficients at the operating point</h3>
+${table(['Region', 'Area (one face)', 'h<sub>c</sub> + h<sub>r</sub>', 'G = 2A(h<sub>c</sub>+h<sub>r</sub>)', 'Q'], [
+  ['Heater copper area (both faces)', `${f(G.padW * G.padL, 1)} mm²`, `${f(R.hcPad + R.hrPad, 1)} W/m²K`, `${f(R.Gpad * 1e3, 2)} mW/K`, `${f(R.Qpad, 3)} W`],
+  ['Two resistor bodies (film face + sides)', `2 × ${f(R.Ares * 1e6, 1)} mm²`, `${f(R.Gres1 / R.Ares, 1)} W/m²K`, `${f(2 * R.Gres1 * 1e3, 2)} mW/K`, `${f(R.Qres, 3)} W`],
+  ['Slot walls near the warm zone (bare FR4)', `${f(R.Awall * 0.35 * 1e6, 0)} mm²`, `${f(R.hF, 1)} W/m²K`, `${f(R.Awall * 0.35 * R.hF * 1e3, 2)} mW/K`, `${f(R.Qwall, 3)} W`],
+])}
+<p class="note">Board edges and slot walls total ${f(R.Awall * 1e6, 0)} mm², about ${f(R.Awall / R.Aface * 100, 1)}% of the face area, and most of that wall borders cool frame. The 2D model ignores them, an error of about 1–2%.</p>`;
+
+  // ---------------- fin
+  $('fin').innerHTML = `
+<p>Past the heater pad edge the beam is a straight fin: two copper layers stitched by ${G.viasBeam} vias on 0.8 mm FR4, losing heat from both faces. With θ = T − T<sub>a</sub>:</p>
+<div class="eq">G′ d<sup>2</sup>θ/dx<sup>2</sup> = h P θ, &nbsp; G′ = (k<sub>Cu</sub> 2t<sub>Cu</sub> + k<sub>FR4</sub> t<sub>PCB</sub>) w, &nbsp; m = √(h P / G′)</div>
+<div class="eq">θ(x) = θ<sub>0</sub> · cosh(m(L − x)) / cosh(mL), &nbsp; Q<sub>fin</sub> = θ<sub>0</sub> · m G′ tanh(mL), &nbsp; η = tanh(mL)/(mL)<span class="c">adiabatic tip (the tip loss is ≈ 1% here)</span></div>
+${table(['Quantity', 'Value', 'Note'], [
+  ["G′", `${f(R.Gp * 1e3, 4)} W·mm/K`, `w = ${f(G.beamW)} mm`],
+  ['h<sub>c</sub> + h<sub>r</sub> at beam mean', `${f(R.hBeam, 1)} W/m²K`, `T = ${p('Tbeam')} °C`],
+  ['m, copper faces only (P = 2w)', `${f(R.mCu, 1)} 1/m`, `1/m = ${f(1000 / R.mCu, 1)} mm`],
+  ['m, + FR4 strips (P = 2(w + 2w<sub>s</sub>))', `${f(R.mStrip, 1)} 1/m`, `1/m = ${f(1000 / R.mStrip, 1)} mm`],
+  ['<b>m fitted to measured B2–B5</b>', `<b>${f(R.mFit, 1)} 1/m</b>`, `<b>1/m = ${f(1000 / R.mFit, 1)} mm</b>, RMS 0.2 K on 4 sensors`],
+  ['Effective loss perimeter h P / h', `${f(R.Pfit * 1e3, 1)} mm`, `vs 2w = ${f(2 * G.beamW, 1)} mm of copper face`],
+  ['mL', `${f(R.mFit * G.beamL * 1e-3, 2)}`, `L = ${f(G.beamL)} mm (pad edge → free end)`],
+  ['Fin efficiency η', `${f(R.etaFit * 100, 0)}%`, ''],
+  ['Fin input resistance 1/(mG′ tanh mL)', `${f(1 / R.GfinFit, 0)} K/W`, `copper-only estimate ${f(1 / R.GfinCu, 0)} K/W`],
+  ['Q<sub>fin</sub> = θ<sub>0</sub> / R<sub>fin</sub>', `${f(R.Qbeam, 3)} W`, `θ<sub>0</sub> = ${p('thEdge')} K; ≈ ${f(R.Qbeam / Pw * 100, 0)}% of P`],
+  ['θ<sub>tip</sub> / θ<sub>0</sub>', `${f(R.tipRatio, 3)}`, ''],
+])}
+<p>The measured decay is about ${f(R.mFit / R.mCu, 1)}× steeper than the copper faces alone predict. The extra loss comes from the uncoppered FR4 alongside and between the slots, and from the FR4 bridges and 6 mil traces that tie the beam to the frame at each sensor. The 2D model resolves those directly, which is why it fits with a single h. Fitted profile (θ<sub>0</sub> = ${p('thEdge')} K at the pad edge, x from the heater centre):</p>
+${(() => { const L = G.beamTipFromCentre * 1e-3, x0 = (G.padY1 - 15.24) * 1e-3, m = R.mFit, th0 = p('thEdge');
+  const meas = [51.7, 29.2, 18.6, 13.8];
+  return table(['Sensor', 'x', 'θ fin model', 'θ measured'], G.sensors.slice(1).map((x, k) => [`B${k + 2}`, `${f(x)} mm`, `${f(th0 * Math.cosh(m * (L - x * 1e-3)) / Math.cosh(m * (L - x0)), 1)} K`, `${f(meas[k], 1)} K`])); })()}`;
+
+  // ---------------- parasitic
+  $('para').innerHTML = `
+<h3>Uncoppered FR4 as a fin</h3>
+<div class="eq">m<sub>FR4</sub> = √(2(h<sub>c</sub>+h<sub>r</sub>) / (k<sub>FR4,xy</sub> t<sub>PCB</sub>)) = ${f(R.mF, 0)} 1/m &nbsp;→&nbsp; 1/m<sub>FR4</sub> = ${f(1000 / R.mF, 1)} mm</div>
+<p>Bare FR4 only works as a heat sink within about ${f(1000 / R.mF, 0)} mm of copper. The 0.635 mm strips beside the beam are fully effective (η = ${f(R.etaStrip * 100, 0)}%) but small. Around the heater pad the FR4 out to the slots adds edge conductance G′<sub>edge</sub> = √(2 h k t) = ${f(R.GpEdge, 3)} W/(m·K) per metre of copper edge. Over the pad's ${f(R.padFreePerim * 1e3, 1)} mm free perimeter an untruncated FR4 fin would add up to ${f(R.GedgePad * 1e3, 2)} mW/K, comparable to the pad's own faces (${f(R.Gpad * 1e3, 2)} mW/K). The slots cut it to a ring about ${p('wRing')} mm wide, worth ${f(R.Gring * 1e3, 2)} mW/K. Across the whole isolation zone, the warm FR4 strips, bridges and ring still carry about a quarter of the heat in the 2D budget (§9), and the frame beyond them another quarter.</p>
+<h3>Conduction across the slot bridges</h3>
+<div class="eq">G<sub>trace</sub> = k<sub>Cu</sub> w<sub>tr</sub> t<sub>Cu</sub> / L<sub>br</sub>, &nbsp; G<sub>bridge</sub> = k<sub>FR4</sub> t<sub>PCB</sub> w<sub>br</sub> / L<sub>br</sub></div>
+<p>The frame isn't an ambient-temperature sink; it warms to about 35 °C on average. Each link is therefore in series with the way its heat spreads into the frame. A trace keeps running through the frame as a small fin (copper plus the FR4 within ±1/m<sub>FR4</sub>), and a bridge end spreads radially into the FR4 plate:</p>
+<div class="eq">G<sub>tr,fin</sub> = √(h · (4/m<sub>FR4</sub>) · k<sub>Cu</sub> w<sub>tr</sub> t<sub>Cu</sub>), &nbsp; G<sub>plate</sub> ≈ 2π k<sub>FR4</sub> t<sub>PCB</sub> / ln((1/m<sub>FR4</sub>)/(w<sub>br</sub>/2)), &nbsp; G<sub>link</sub> = (G<sub>bridge/trace</sub><sup>−1</sup> + G<sub>spread</sub><sup>−1</sup>)<sup>−1</sup></div>
+${table(['Path', 'Across bridge only', 'In series with frame spreading', 'Note'], [
+  ['One 6 mil (0.152 mm) sensor trace', `${f(R.Gtr6 * 1e6, 0)} µW/K`, `${f(R.Gtr6s * 1e6, 0)} µW/K (${f(1 / R.Gtr6s, 0)} K/W)`, `L = ${p('bridgeL')} mm across the bridge`],
+  ['One 10 mil (0.254 mm) heater supply trace', `${f(R.Gtr10 * 1e6, 0)} µW/K`, `${f(R.Gtr10s * 1e6, 0)} µW/K (${f(1 / R.Gtr10s, 0)} K/W)`, 'bottom, through the heater neck'],
+  ['One FR4 bridge 2.54 × 2.54 mm', `${f(R.Gbridge * 1e6, 0)} µW/K`, `${f(R.Gbridges * 1e6, 0)} µW/K (${f(1 / R.Gbridges, 0)} K/W)`, `G<sub>plate</sub> = ${f(R.Gplate * 1e6, 0)} µW/K`],
+  ['Heater-pad region total: 3 B1 traces + 2 supply + ' + p('nBridge') + ' bridges', '', `${f(R.Gneck * 1e3, 2)} mW/K (${f(1 / R.Gneck, 0)} K/W)`, 'beam bridges are already inside the fitted fin'],
+  ['FR4 ring around the pad (truncated fin)', '', `${f(R.Gring * 1e3, 2)} mW/K`, `w = ${p('wRing')} mm, η = ${f(R.etaRing * 100, 0)}%`],
+])}
+<p>Across its bridge alone, a single 6 mil trace conducts ${f(R.Gtr6 / R.Gbridge, 1)}× as much as a whole square FR4 bridge, because ${p('tCu')} µm of copper has the sheet conductance of about ${f(kCu_ratio() / 1000, 0)} mm of FR4. Once the series spreading in the frame is included, each trace is worth about ${f(1 / R.Gtr6s, 0)} K/W. The heater wires and connector pins (not modelled) add a further sink at the board ends.</p>`;
+
+  // ---------------- budget
+  const B = {
+    single: { title: 'Single heater (V02), 2 × 10 Ω, 100%: 1.107 W', regions: [['Heater copper area', 0.220, 0.111, 98.7, 97], ['Beam copper', 0.153, 0.078, 56.4, 190], ['FR4 inside slot ring (no Cu)', 0.190, 0.100, 46.5, 353], ['Frame + connectors', 0.162, 0.094, 35.1, 797]] },
+    dualBoth: { title: 'Dual heater (V01), 2 × 15 Ω each, both 100%: 1.442 W', regions: [['Heater 1 copper', 0.161, 0.080, 82.3, 97], ['Heater 2 copper', 0.161, 0.080, 82.5, 97], ['Beam copper', 0.172, 0.085, 69.4, 142], ['FR4 inside slot ring (no Cu)', 0.238, 0.121, 56.9, 287], ['Frame + connectors', 0.220, 0.126, 38.6, 797]] },
+    dualH1: { title: 'Dual heater (V01), H1 only 100%: 0.768 W (incl. 14% crosstalk to H2 pad)', regions: [['Heater 1 copper', 0.128, 0.063, 72.7, 97], ['Heater 2 copper', 0.037, 0.020, 42.7, 97], ['Beam copper', 0.088, 0.046, 50.8, 142], ['FR4 inside slot ring (no Cu)', 0.124, 0.066, 43.7, 287], ['Frame + connectors', 0.121, 0.075, 33.3, 797]] },
+  };
+  const cols = ['#e03131', '#f76707', '#f59f00', '#37b24d', '#1c7ed6'];
+  $('budgetBox').innerHTML = Object.values(B).map(b => {
+    const tot = b.regions.reduce((s, r) => s + r[1] + r[2], 0), conv = b.regions.reduce((s, r) => s + r[1], 0);
+    return `<div class="card"><b>${b.title}</b>
+      <div class="bar">${b.regions.map((r, i) => `<div style="width:${(r[1] + r[2]) / tot * 100}%;background:${cols[i % cols.length]}" title="${r[0]}">${f((r[1] + r[2]) / tot * 100, 0)}%</div>`).join('')}</div>
+      ${table(['Region', 'Mean T', 'Face area', 'Convection', 'Radiation', 'Share'], b.regions.map((r, i) => [`<i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${cols[i % cols.length]};margin-right:6px"></i>${r[0]}`, `${f(r[3], 1)} °C`, `${r[4]} mm²`, `${f(r[1], 3)} W`, `${f(r[2], 3)} W`, `${f((r[1] + r[2]) / tot * 100, 0)}%`]))}
+      <p class="note">Total ${f(tot, 3)} W: convection ${f(conv / tot * 100, 0)}%, radiation ${f(100 - conv / tot * 100, 0)}%.</p></div>`;
+  }).join('') + `
+<p><b>Analytic cross-check (single, §5–8):</b> summing the parallel paths referenced to the Beam 1 rise gives G ≈ pad faces ${f(R.Gpad * 1e3, 1)} + resistor bodies ${f(2 * R.Gres1 * 1e3, 1)} + beam fin ${f(R.GfinFit * p('thEdge') / dTpad * 1e3, 1)} (scaled by θ₀/θ<sub>B1</sub>) + FR4 ring ${f(R.Gring * 1e3, 1)} + pad-region links to the frame ${f(R.Gneck * 1e3, 1)} = <b>${f(R.Gtot * 1e3, 1)} mW/K</b>. That is R ≈ ${f(R.Rtot, 0)} K/W, against <b>${f(R.Rmeas, 0)} K/W measured</b> (${f((R.Rtot / R.Rmeas - 1) * 100, 0)}%). The beam term borrows the measured fin parameter, so this is a consistency check rather than an independent prediction. The remaining gap comes mostly from the frame-link and ring estimates, which are the least certain items. The 2D model resolves those geometrically and matches the log within 2 K.</p>`;
+
+  // ---------------- ladder
+  const L = [
+    ['Ambient', Ta, ''],
+    ['Beam free end (tip, fin model)', Ta + p('thEdge') * R.tipRatio, 'cosh model'],
+    ['Heater pad edge / beam entry', Ta + p('thEdge'), 'fin fit'],
+    ['Beam 1, top copper over the heater', p('TB1'), 'measured'],
+    ['Bottom pad under the resistors', R.Tbot, `+ (P/2)·R<sub>vert</sub>`],
+    ['Solder joint / termination', R.Tjoint, `+ (P/4)·R<sub>joint</sub>`],
+    ['Resistor body, mean', R.TfilmMean, `+ P<sub>r</sub>·R<sub>int,mean</sub>`],
+    ['Resistor film, hot spot', R.TfilmPeak, `+ P<sub>r</sub>·R<sub>int,peak</sub>`],
+  ];
+  const tmax = R.TfilmPeak;
+  $('ladderBox').innerHTML = `<div class="card">${L.map(r => `<div style="display:grid;grid-template-columns:260px 1fr 70px;gap:10px;align-items:center;margin:4px 0">
+      <span>${r[0]} <span class="note">${r[2]}</span></span>
+      <div style="height:14px;border-radius:4px;background:linear-gradient(90deg,#1c7ed6,#f59f00 60%,#e03131);width:${Math.max(2, (r[1] - Ta + 1) / (tmax - Ta + 1) * 100)}%"></div>
+      <b style="text-align:right;font-variant-numeric:tabular-nums">${f(r[1], 1)} °C</b></div>`).join('')}</div>
+<div class="flag"><b>Resistor rating (Bourns CRM2512-FX-10R0ELF, 2 W).</b> Each resistor dissipates ${f(Pr, 2)} W at an estimated body temperature of ${f(R.TfilmMean, 0)} °C (hot spot ${f(R.TfilmPeak, 0)} °C). The CRM2512 is rated 2 W at 70 °C and derated linearly to zero at 155 °C, which allows ${f(2 * Math.max(0, (155 - R.TfilmMean) / 85), 2)} W at this temperature. Continuous 100% drive on the single board runs the parts at about ${f(Pr / Math.max(1e-6, 2 * (155 - R.TfilmMean) / 85) * 100, 0)}% of their derated limit. The 1 W Stackpole RMCF2512FT10R0 used in the earlier BOM would sit at ${f(Pr / Math.max(1e-6, (155 - R.TfilmMean) / 85) * 100, 0)}%. (This applies the derating curve to the estimated body temperature, which is conservative; the datasheet curve is drawn against the part's surrounding temperature.) At ${f(Ta, 0)} °C ambient, 100% duty settles Beam 1 near ${f(p('TB1'), 0)} °C, so the 125 °C trip is reachable only with a warmer ambient or a stiffer supply. Even with Beam 1 at the trip point, the 2 W part's allowance (≈ ${f(2 * (155 - (125 + (R.TfilmMean - p('TB1')))) / 85, 2)} W) is about equal to what 100% duty delivers.</div>
+<div class="flag">The dual board (RMCF2512FT15R0) is comfortable. With one heater at 100% each resistor takes about 0.38 W at roughly 80–90 °C, and the derated limit there is about 0.76–0.88 W.</div>
+<p class="note">Beam 1 reads the top copper, about ${f(R.TfilmPeak - p('TB1'), 0)} K below the resistor film. The over-temperature trip at 125 °C on B1 therefore corresponds to a film temperature of about ${f(125 + (R.TfilmPeak - p('TB1')) * (125 - Ta) / (p('TB1') - Ta), 0)} °C.</p>`;
+
+  // ---------------- full equations
+  $('fullEq').innerHTML = `
+<h3>11.1 Lumped node model (single heater)</h3>
+<p>Nodes: resistor film/body T<sub>r</sub> (×2, symmetric), bottom pad T<sub>b</sub>, top pad T<sub>t</sub> (Beam 1), a distributed beam θ(x,t), and an equivalent frame node T<sub>f</sub>. θ = T − T<sub>a</sub>, h<sub>i</sub> = h<sub>c</sub>(θ<sub>i</sub>) + h<sub>r</sub>(T<sub>i</sub>).</p>
+<div class="eq">C<sub>r</sub> dT<sub>r</sub>/dt = P<sub>r</sub> − (T<sub>r</sub> − T<sub>b</sub>) / (R<sub>int,mean</sub> + R<sub>joint</sub>/2) − (T<sub>r</sub> − T<sub>b</sub>)/R<sub>gap</sub> − h<sub>r,body</sub> A<sub>res</sub> θ<sub>r</sub></div>
+<div class="eq">C<sub>b</sub> dT<sub>b</sub>/dt = 2(T<sub>r</sub> − T<sub>b</sub>)(1/(R<sub>int,mean</sub>+R<sub>joint</sub>/2) + 1/R<sub>gap</sub>) − (T<sub>b</sub> − T<sub>t</sub>)/R<sub>vert</sub> − h<sub>b</sub> A<sub>pad</sub> θ<sub>b</sub> − (T<sub>b</sub> − θ(0)−T<sub>a</sub>)/(2R<sub>spread</sub>) − G<sub>edge</sub>θ<sub>b</sub>/2</div>
+<div class="eq">C<sub>t</sub> dT<sub>t</sub>/dt = (T<sub>b</sub> − T<sub>t</sub>)/R<sub>vert</sub> − h<sub>t</sub> A<sub>pad</sub> θ<sub>t</sub> − (T<sub>t</sub> − θ(0)−T<sub>a</sub>)/(2R<sub>spread</sub>) − G<sub>edge</sub>θ<sub>t</sub>/2 − (T<sub>t</sub> − T<sub>f</sub>) G<sub>neck</sub></div>
+<div class="eq">C′ ∂θ/∂t = G′ ∂<sup>2</sup>θ/∂x<sup>2</sup> − h(θ) P<sub>eff</sub> θ − Σ<sub>j</sub> G<sub>br,j</sub> (θ − θ<sub>f</sub>) δ(x − x<sub>j</sub>), &nbsp; 0 &lt; x &lt; L</div>
+<div class="eq">−G′ ∂θ/∂x|<sub>0</sub> = (θ<sub>b</sub>+θ<sub>t</sub>)/2 − θ(0) over R<sub>spread</sub> (pad → beam), &nbsp; −G′ ∂θ/∂x|<sub>L</sub> = h A<sub>tip</sub> θ(L) ≈ 0</div>
+<div class="eq">C<sub>f</sub> dT<sub>f</sub>/dt = (T<sub>t</sub> − T<sub>f</sub>) G<sub>neck</sub> + Σ<sub>j</sub> G<sub>br,j</sub>(θ(x<sub>j</sub>) − θ<sub>f</sub>) − h<sub>f</sub> A<sub>frame</sub> θ<sub>f</sub> − G<sub>wires</sub> θ<sub>f</sub></div>
+<p>Sensor outputs: T<sub>B1</sub> = T<sub>t</sub>, T<sub>Bi</sub> = θ(x<sub>i</sub>) + T<sub>a</sub>, each passed through τ<sub>s</sub> dT<sub>s</sub>/dt = T − T<sub>s</sub>. For the dual board add a second resistor/pad pair at x = ${f(G.dualSpacing)} mm with power P<sub>2</sub>(1−χ) + P<sub>1</sub>χ, where χ ≈ 0.14 is the crosstalk measured from the switching transients.</p>
+
+<h3>11.2 2D sheet model (what <code>pcb_heater_sim.html</code> solves)</h3>
+<p>The board is one sheet. Through-thickness gradients are lumped because R<sub>vert</sub> (≈ ${f(R.vert, 1)} K/W) is small compared with the surface resistance of the same area (≈ ${f(1 / R.Gpad, 0)} K/W).</p>
+<div class="eq">(ρc t)<sub>eff</sub>(x,y) ∂T/∂t = ∇·[(k t)<sub>eff</sub>(x,y) ∇T] + q″<sub>heater</sub>(x,y) − 2[h<sub>c</sub>(T − T<sub>a</sub>) + ε σ (T<sup>4</sup> − T<sub>a</sub><sup>4</sup>)]</div>
+<div class="eq">(k t)<sub>eff</sub> = f<sub>b</sub> k<sub>FR4</sub> t<sub>PCB</sub> + k<sub>Cu</sub> t<sub>Cu</sub>(f<sub>top</sub> + f<sub>bot</sub>), &nbsp; (ρc t)<sub>eff</sub> = f<sub>b</sub> ρc<sub>FR4</sub> t<sub>PCB</sub> + ρc<sub>Cu</sub> t<sub>Cu</sub>(f<sub>top</sub>+f<sub>bot</sub>) + C<sub>parts</sub>/A</div>
+<div class="eq">q″<sub>heater</sub> = P<sub>k</sub> / A<sub>2512</sub> over each resistor footprint, &nbsp; −(k t)<sub>eff</sub> ∂T/∂n = 0 on slot walls and board edges</div>
+<p>Discretisation: cell fractions f<sub>b</sub>, f<sub>top</sub>, f<sub>bot</sub> are rasterised from the outline, cut-outs and copper gerbers. Each face between cells gets conductance G<sub>ij</sub> = 2(kt)<sub>i</sub>(kt)<sub>j</sub>/((kt)<sub>i</sub>+(kt)<sub>j</sub>), and the scheme is explicit Euler with Δt ≤ 0.9·min(C<sub>i</sub>/ΣG<sub>i</sub>).</p>
+<div class="eq">C<sub>i</sub> (T<sub>i</sub><sup>n+1</sup> − T<sub>i</sub><sup>n</sup>)/Δt = P<sub>i</sub> + Σ<sub>j∈N(i)</sub> G<sub>ij</sub>(T<sub>j</sub><sup>n</sup> − T<sub>i</sub><sup>n</sup>) − 2A<sub>i</sub>[h<sub>c,i</sub>(T<sub>i</sub><sup>n</sup> − T<sub>a</sub>) + εσ((T<sub>i</sub><sup>n</sup>)<sup>4</sup> − T<sub>a</sub><sup>4</sup>)]</div>
+
+<h3>11.3 Steady-state energy balance</h3>
+<div class="eq">Σ<sub>k</sub> P<sub>k</sub> = Σ<sub>surfaces</sub> ∫ [h<sub>c</sub>(T−T<sub>a</sub>) + εσ(T<sup>4</sup>−T<sub>a</sub><sup>4</sup>)] dA + Q<sub>wires</sub> + Q<sub>edges</sub></div>`;
+
+  // ---------------- transient
+  $('trans').innerHTML = table(['Element', 'Heat capacity', 'Time constant', 'Meaning'], [
+    ['One 2512 resistor (≈ 0.044 g alumina)', `${f(R.Cres * 1e3, 1)} mJ/K`, `${f(R.tauRes, 2)} s`, 'film → pad; effectively instantaneous'],
+    ['Heater pad + 2 resistors', `${f(R.Cpad * 1e3, 0)} mJ/K`, `≈ ${f(R.Cpad * R.Rmeas * 0.55, 0)} s`, 'C<sub>pad</sub> × (pad’s share of R<sub>tot</sub>)'],
+    ['Beam, per mm', `${f(R.Cp, 2)} mJ/(K·mm)`, `τ<sub>loss</sub> = C′/(hP) = ${f(R.tauLoss, 0)} s`, 'local cooling of an isolated beam element'],
+    ['Beam diffusivity α = G′/C′', `${f(R.alpha * 1e6, 1)} mm²/s`, `L²/α = ${f(R.tauDiff, 0)} s`, 'diffusion time over the full beam'],
+    ['MCP9701A on its pads', '≈ 6 mJ/K', `≈ ${f(R.tauSensor, 1)} s`, 'sensor lag'],
+  ]) + `<p>The measured 63% rise time of Beam 1 is about 30 s and the far sensors take 60–80 s, matching τ<sub>loss</sub> and the diffusion time. Heat reaches B5 by conduction no sooner than about (39 mm)²/α ≈ ${f((0.039 ** 2) / R.alpha, 0)} s. That is why the sub-second response of the far heater pad in the dual log (<code>Setup1</code>) cannot be conduction and points to electrical crosstalk.</p>`;
+}
+
+// ------------------------------------------------------------------ drawings
+function drawSection() {
+  const s = $('xsec');
+  const X = (y) => 40 + (y - 8.6) * 50;           // board y [mm] → svg x
+  const top = 150, cu = 8, mk = 5, fr = 110;      // stack (svg px)
+  const yMT = top, yCT = top + mk, yF = yCT + cu, yCB = yF + fr, yMB = yCB + cu, yBot = yMB + mk;
+  const resTop = yBot + 7, resH = 62;
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const slotA = X(8.6), slotB = X(10.16), padA = X(10.795), beamEnd = X(24.2);
+  let o = `<defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${css('--hot')}"/></marker>
+    <marker id="aw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${css('--warm')}"/></marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${css('--cool')}"/></marker>
+  </defs>
+  <rect x="0" y="0" width="960" height="420" fill="${css('--air')}" rx="8"/>
+  <text x="14" y="22" font-size="13" fill="${css('--muted')}">air (T<tspan font-size="10" dy="3">a</tspan><tspan dy="-3">)</tspan></text>`;
+  // FR4 core
+  o += `<rect x="${slotB}" y="${yF}" width="${beamEnd - slotB}" height="${fr}" fill="${css('--fr4')}"/>`;
+  // copper (top + bottom) from pad start to section end
+  o += `<rect x="${padA}" y="${yCT}" width="${beamEnd - padA}" height="${cu}" fill="${css('--cu')}"/>`;
+  o += `<rect x="${padA}" y="${yCB}" width="${beamEnd - padA}" height="${cu}" fill="${css('--cu')}"/>`;
+  // mask (with openings at resistor pads on bottom, sensor pads on top)
+  const openB = [[11.44, 13.44], [17.04, 19.04]], openT = [[13.79 + 0.3, 14.29 + 0.4], [16.19 - 0.4, 16.69 - 0.3]];
+  const maskSeg = (y, opens) => { let a = slotB, r = ''; for (const [o0, o1] of opens) { r += `<rect x="${a}" y="${y}" width="${X(o0) - a}" height="${mk}" fill="${css('--mask')}"/>`; a = X(o1); } return r + `<rect x="${a}" y="${y}" width="${beamEnd - a}" height="${mk}" fill="${css('--mask')}"/>`; };
+  o += maskSeg(yMT, openT) + maskSeg(yMB, openB);
+  // slot (left end)
+  o += `<rect x="${slotA}" y="${yMT - 2}" width="${slotB - slotA}" height="${yBot - yMT + 4}" fill="${css('--air')}"/>`;
+  o += `<line x1="${slotB}" y1="${yMT}" x2="${slotB}" y2="${yBot}" stroke="${css('--muted')}" stroke-width="1.5"/>`;
+  // vias at y = 17.78, 19.05, 20.32 (x = 7.62 column has 17.78/19.05)
+  for (const vy of [17.78, 19.05]) { const vx = X(vy); o += `<rect x="${vx - 10}" y="${yCT}" width="20" height="${yMB - yCT}" fill="${css('--cu')}"/><rect x="${vx - 6}" y="${yCT}" width="12" height="${yMB - yCT}" fill="${css('--mask')}" opacity=".55"/>`; }
+  // resistor: terminations + body + film on outer (lower) face
+  const r0 = X(12.065), r1 = X(18.415), t0 = X(12.665), t1 = X(17.815);
+  o += `<rect x="${X(11.54)}" y="${yBot}" width="${X(13.34) - X(11.54)}" height="7" fill="#adb5bd"/><rect x="${X(17.14)}" y="${yBot}" width="${X(18.94) - X(17.14)}" height="7" fill="#adb5bd"/>`;
+  o += `<rect x="${r0}" y="${resTop}" width="${r1 - r0}" height="${resH}" fill="#f1f3f5" stroke="#868e96"/>`;
+  o += `<rect x="${r0}" y="${resTop}" width="${t0 - r0}" height="${resH}" fill="#ced4da" stroke="#868e96"/><rect x="${t1}" y="${resTop}" width="${r1 - t1}" height="${resH}" fill="#ced4da" stroke="#868e96"/>`;
+  o += `<rect x="${t0}" y="${resTop + resH - 7}" width="${t1 - t0}" height="7" fill="${css('--hot')}"/>`;
+  // sensor (projected) on top
+  const s0 = X(13.79), s1 = X(16.69);
+  o += `<rect x="${s0}" y="${yMT - 46}" width="${s1 - s0}" height="40" rx="3" fill="#343a40" stroke="#868e96" stroke-dasharray="4 3"/>
+        <rect x="${X(14.0)}" y="${yMT - 6}" width="${X(14.6) - X(14.0)}" height="6" fill="#adb5bd"/><rect x="${X(15.9)}" y="${yMT - 6}" width="${X(16.5) - X(15.9)}" height="6" fill="#adb5bd"/>
+        <text x="${(s0 + s1) / 2}" y="${yMT - 22}" fill="#fff" font-size="12" text-anchor="middle">MCP9701A (B1)</text>`;
+  // labels (right side stack labels)
+  const lab = (y, t) => `<text x="${beamEnd + 8}" y="${y + 4}" font-size="12" fill="${css('--ink')}">${t}</text>`;
+  o += lab(yMT - 12, 'top mask 20 µm (ε≈0.9)') + lab(yCT + 14, 'top Cu 35 µm') + lab(yF + fr / 2, 'FR4 0.8 mm') + lab(yCB - 8, 'bottom Cu 35 µm') + lab(yMB + 16, 'bottom mask');
+  o += `<text x="${(r0 + r1) / 2}" y="${resTop + 30}" font-size="12" text-anchor="middle" fill="#495057">alumina body 0.55 mm</text>
+        <text x="${(r0 + r1) / 2}" y="${resTop + resH + 18}" font-size="12" text-anchor="middle" fill="${css('--hot')}">resistive film (heat source)</text>
+        <text x="${r0 - 6}" y="${resTop + 30}" font-size="11" text-anchor="end" fill="${css('--muted')}">termination + solder</text>
+        <text x="${X(18.4)}" y="${yBot + 97}" font-size="11" text-anchor="middle" fill="${css('--muted')}">vias (tented)</text>
+        <text x="${(slotA + slotB) / 2}" y="${yMT - 12}" font-size="11" text-anchor="middle" fill="${css('--muted')}">slot</text>
+        <text x="${slotB + 4}" y="${yF + fr - 8}" font-size="10.5" fill="${css('--muted')}">FR4, no Cu</text>
+        <text x="${X(22.2)}" y="${yF + 60}" font-size="12" text-anchor="middle" fill="${css('--ink')}">beam →</text>
+        <line x1="${X(20.32)}" y1="${yMT - 60}" x2="${X(20.32)}" y2="${yBot + 80}" stroke="${css('--muted')}" stroke-dasharray="3 3"/>
+        <text x="${X(20.32) + 4}" y="${yMT - 64}" font-size="11" fill="${css('--muted')}">pad edge (w 10.16 → 5.08 mm)</text>`;
+  // heat-path arrows
+  const A = (x1, y1, x2, y2, m = 'ah', col = '--hot', w = 2.5) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${css(col)}" stroke-width="${w}" marker-end="url(#${m})"/>`;
+  const fy = resTop + resH - 12;
+  o += A((t0 + t1) / 2 - 10, fy, t0 + 6, fy) + A((t0 + t1) / 2 + 10, fy, t1 - 6, fy);
+  o += A((r0 + t0) / 2, fy - 8, (r0 + t0) / 2, yBot + 2) + A((t1 + r1) / 2, fy - 8, (t1 + r1) / 2, yBot + 2);
+  o += A((t1 + r1) / 2 + 4, yCB + 4, X(17.78) - 14, yCB + 4) + A(X(17.78), yCB - 4, X(17.78), yCT + 10) + A(X(19.05), yCB - 4, X(19.05), yCT + 10);
+  o += A((r0 + t0) / 2 + 6, yCB + 4, X(16.6), yCB + 4) + A(X(15.24), yCB - 2, X(15.24), yCT + 10, 'ah', '--hot', 1.5);
+  o += A(X(17.4), yCT + 4, X(15.6), yCT + 4) + A(X(19.3), yCT + 4, X(23.8), yCT + 4) + A(X(19.3), yCB + 4, X(23.8), yCB + 4);
+  // gap path (thin)
+  o += A((t0 + t1) / 2, resTop + 6, (t0 + t1) / 2, yBot + 1, 'ah', '--hot', 1);
+  o += `<text x="${(t0 + t1) / 2 + 6}" y="${resTop + 15}" font-size="10.5" fill="${css('--muted')}">↑ air gap (≈${f(R.gapShare * 100, 0)}%)</text>`;
+  // surface losses (wavy up from top, down from bottom, from resistor)
+  const wave = (x, y, dir) => { let d = `M${x},${y}`; for (let i = 1; i <= 4; i++) d += ` q${(i % 2 ? 6 : -6)},${dir * 6} 0,${dir * 12}`; return `<path d="${d}" fill="none" stroke="${css('--warm')}" stroke-width="2" marker-end="url(#aw)"/>`; };
+  for (const yy of [11.2, 18.6, 21.5, 23.3]) o += wave(X(yy), yMT - 4, -1);
+  for (const yy of [10.6, 14.5, 21.0, 23.0]) o += wave(X(yy), (yy > 12 && yy < 19 ? resTop + resH + 26 : yBot + 4), 1);
+  o += wave(slotB - 4, yF + 30, 0.0001).replace('stroke-width="2"', 'stroke-width="0"');
+  o += `<path d="M${slotB - 2},${yF + 55} l-22,0" stroke="${css('--warm')}" stroke-width="2" marker-end="url(#aw)"/>
+        <text x="${slotA + 2}" y="${yF + 75}" font-size="10" fill="${css('--muted')}">wall</text>`;
+  o += `<text x="${X(9.0)}" y="${yMT - 70}" font-size="12" fill="${css('--warm')}">convection + radiation from every mask face</text>`;
+  s.innerHTML = o;
+}
+
+function drawNetwork() {
+  const s = $('net');
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const N = {
+    film: [170, 110, 'Film / body Tᵣ'], term: [400, 110, 'Terminations'], bot: [630, 110, 'Bottom pad T_b'],
+    top: [630, 300, 'Top pad T_t = B1'], edge: [800, 205, 'Pad edge θ₀'], beam: [930, 205, 'Beam B2…B5'],
+    frame: [330, 330, 'Frame T_f'],
+  };
+  const C = (k) => css(k);
+  let o = `<rect width="980" height="470" rx="8" fill="${C('--air')}"/>
+    <defs><marker id="nh" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${C('--hot')}"/></marker></defs>`;
+  // resistor symbol on a straight link, label at (lx, ly)
+  const link = (a, b, label, lx, ly, col = '--hot', anchor = 'middle', dash = '') => {
+    const [x1, y1] = N[a] || a, [x2, y2] = N[b] || b;
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, ang = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${C(col)}" stroke-width="2" ${dash ? `stroke-dasharray="${dash}"` : ''}/>
+      <g transform="translate(${mx},${my}) rotate(${ang})"><rect x="-20" y="-7" width="40" height="14" rx="2" fill="${C('--panel')}" stroke="${C(col)}" stroke-width="1.5"/></g>
+      <text x="${lx}" y="${ly}" font-size="12" text-anchor="${anchor}" fill="${C(col)}">${label}</text>`;
+  };
+  // surface loss: resistor to a local ambient ground
+  const ground = (k, dx, dy, label, lx, ly, anchor = 'start') => {
+    const [x, y] = N[k], gx = x + dx, gy = y + dy;
+    const g = `<line x1="${gx - 12}" y1="${gy}" x2="${gx + 12}" y2="${gy}" stroke="${C('--warm')}" stroke-width="2"/><line x1="${gx - 7}" y1="${gy + 5}" x2="${gx + 7}" y2="${gy + 5}" stroke="${C('--warm')}" stroke-width="2"/><line x1="${gx - 3}" y1="${gy + 10}" x2="${gx + 3}" y2="${gy + 10}" stroke="${C('--warm')}" stroke-width="2"/>`;
+    return link([x, y], [gx, gy], label, lx, ly, '--warm', anchor) + g;
+  };
+  o += `<line x1="40" y1="${N.film[1]}" x2="${N.film[0] - 14}" y2="${N.film[1]}" stroke="${C('--hot')}" stroke-width="3" marker-end="url(#nh)"/>
+        <text x="40" y="${N.film[1] - 12}" font-size="13" font-weight="600" fill="${C('--hot')}">P = ${f(p('Pw'), 2)} W</text>`;
+  o += link('film', 'term', `R_int ${f(R.intMean / 2, 1)}`, 285, 96);
+  o += link('term', 'bot', `R_joint ${f(R.joint / 4, 2)}`, 515, 96);
+  o += `<path d="M${N.film[0] + 8},${N.film[1] + 10} C ${N.film[0] + 120},${N.film[1] + 80} ${N.bot[0] - 120},${N.bot[1] + 80} ${N.bot[0] - 8},${N.bot[1] + 10}" fill="none" stroke="${C('--hot')}" stroke-width="1.3" stroke-dasharray="5 4"/>
+        <text x="${(N.film[0] + N.bot[0]) / 2}" y="${N.film[1] + 80}" font-size="12" text-anchor="middle" fill="${C('--hot')}">R_gap ${f(R.gap / 2, 0)} (air under bodies)</text>`;
+  o += link('bot', 'top', `R_vert ${f(R.vert, 2)}`, 642, 210, '--hot', 'start');
+  o += link('bot', 'edge', `R_spread ${f(R.spread * 2, 1)}`, 728, 140, '--hot', 'start');
+  o += link('top', 'edge', `R_spread ${f(R.spread * 2, 1)}`, 728, 278, '--hot', 'start');
+  o += link('edge', 'beam', `R_fin ${f(1 / R.GfinFit, 0)}`, 865, 190);
+  o += link('top', 'frame', `necks + traces ≈ ${f(1 / R.Gneck, 0)}`, 480, 335, '--cool');
+  o += `<path d="M${N.beam[0]},${N.beam[1] + 10} L${N.beam[0]},420 L${N.frame[0]},420 L${N.frame[0]},${N.frame[1] + 10}" fill="none" stroke="${C('--cool')}" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="${(N.beam[0] + N.frame[0]) / 2}" y="414" font-size="12" text-anchor="middle" fill="${C('--cool')}">FR4 bridges + 6 mil traces at each sensor (distributed)</text>`;
+  o += ground('film', 0, 150, `resistor bodies ${f(1 / (2 * R.Gres1), 0)}`, 182, 190);
+  o += ground('bot', 0, -80, `bottom face ${f(2 / R.Gpad, 0)}`, 642, 60);
+  o += ground('top', 0, 90, `top face ${f(2 / R.Gpad, 0)}`, 642, 355);
+  o += ground('edge', 0, 110, `FR4 ring ${f(1 / R.Gring, 0)}`, 812, 285);
+  o += ground('frame', -110, 0, 'frame faces + wires', 220, 318, 'middle');
+  for (let i = 0; i < 3; i++) { const x = N.beam[0] - 24 + i * 24; o += `<line x1="${x}" y1="${N.beam[1] + 12}" x2="${x}" y2="${N.beam[1] + 90}" stroke="${C('--warm')}" stroke-width="1.5"/><line x1="${x - 6}" y1="${N.beam[1] + 90}" x2="${x + 6}" y2="${N.beam[1] + 90}" stroke="${C('--warm')}" stroke-width="2"/>`; }
+  o += `<text x="${N.beam[0] + 30}" y="${N.beam[1] + 108}" font-size="12" text-anchor="end" fill="${C('--warm')}">h·P_eff per mm</text>`;
+  for (const [k, [x, y, t]] of Object.entries(N)) {
+    o += `<circle cx="${x}" cy="${y}" r="9" fill="${C('--panel')}" stroke="${C('--ink')}" stroke-width="2"/>`;
+    const below = k === 'top' || k === 'frame';
+    o += `<text x="${x + (k === 'top' ? -14 : 0)}" y="${below ? y + 26 : y - 16}" font-size="12.5" font-weight="600" text-anchor="${k === 'top' ? 'end' : 'middle'}" fill="${C('--ink')}">${t}</text>`;
+  }
+  o += `<text x="960" y="456" font-size="11.5" text-anchor="end" fill="${C('--muted')}">resistances in K/W at the operating point; ⏚ = ambient T_a = ${f(p('Ta'), 1)} °C</text>`;
+  s.innerHTML = o;
+}
+
+// top / bottom views from the gerbers
+function drawBoard(id, side) {
+  const cv = $(id), g = GEO.single, bb = g.bbox;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, S = (w - 20) / (bb[3] - bb[1]), h = Math.round((bb[2] - bb[0]) * S + 20);
+  cv.style.height = h + 'px'; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext('2d');
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  // rotate: board y → screen x, board x → screen y (bottom view mirrored in x so it registers with the top view)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.transform(0, S, S, 0, 10 - bb[1] * S, 10 - bb[0] * S);
+  const lw = 1 / S;
+  const poly = (pts) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts) ctx.lineTo(q[0], q[1]); ctx.closePath(); };
+  poly(g.board); g.cutouts.forEach(c => { ctx.moveTo(c[0][0], c[0][1]); for (const q of c) ctx.lineTo(q[0], q[1]); ctx.closePath(); });
+  ctx.fillStyle = css('--mask'); ctx.fill('evenodd');
+  const layer = side === 'top' ? g.top : g.bottom;
+  ctx.fillStyle = css('--cu'); ctx.strokeStyle = css('--cu'); ctx.lineCap = 'round';
+  for (const q of layer) {
+    if (q[1] === 'C') continue;
+    if (q[0] === 'R') { ctx.beginPath(); for (const c of q[2]) { ctx.moveTo(c[0][0], c[0][1]); for (const r of c) ctx.lineTo(r[0], r[1]); ctx.closePath(); } ctx.fill(); }
+    else if (q[0] === 'L') { ctx.lineWidth = q[6]; ctx.beginPath(); ctx.moveTo(q[2], q[3]); ctx.lineTo(q[4], q[5]); ctx.stroke(); }
+  }
+  const mask = side === 'top' ? g.mask_top : g.mask_bottom;
+  ctx.fillStyle = '#e9ecef'; ctx.strokeStyle = '#868e96'; ctx.lineWidth = 0.8 * lw;
+  for (const q of mask) {
+    if (q[0] === 'F') { ctx.beginPath(); if (q[4] === 'C') ctx.arc(q[2], q[3], q[5] / 2, 0, 7); else ctx.rect(q[2] - q[5] / 2, q[3] - q[6] / 2, q[5], q[6]); ctx.fill(); ctx.stroke(); }
+    else if (q[0] === 'R') { ctx.beginPath(); for (const c of q[2]) { ctx.moveTo(c[0][0], c[0][1]); for (const r of c) ctx.lineTo(r[0], r[1]); ctx.closePath(); } ctx.fill(); ctx.stroke(); }
+  }
+  ctx.fillStyle = '#222';
+  for (const d of g.drills) { ctx.beginPath(); ctx.arc(d[0], d[1], d[2] / 2, 0, 7); ctx.fill(); }
+  if (side === 'bottom') {
+    ctx.strokeStyle = '#4dd4ff'; ctx.lineWidth = 1.6 * lw; ctx.setLineDash([3 * lw, 2 * lw]);
+    for (const r of g.heaters[0].resistors) ctx.strokeRect(r.rect[0] + 0, r.rect[1] + 0.9, r.rect[2] - r.rect[0], r.rect[3] - r.rect[1] - 1.8);
+    ctx.setLineDash([]);
+  } else {
+    ctx.fillStyle = '#343a40'; ctx.strokeStyle = '#fff'; ctx.lineWidth = lw;
+    g.sensors.forEach(s0 => { ctx.beginPath(); ctx.rect(s0.center[0] - 0.65, s0.center[1] - 1.45, 1.3, 2.9); ctx.fill(); ctx.stroke(); });
+  }
+  ctx.strokeStyle = css('--muted'); ctx.lineWidth = lw; poly(g.board); ctx.stroke();
+  g.cutouts.forEach(c => { poly(c); ctx.stroke(); });
+  // annotations (screen space)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sx = (y) => 10 + (y - bb[1]) * S, sy = (x) => 10 + (x - bb[0]) * S;
+  ctx.font = '600 11px system-ui, sans-serif'; ctx.fillStyle = css('--ink'); ctx.textAlign = 'center';
+  if (side === 'top') {
+    g.sensors.forEach((s0, k) => ctx.fillText('B' + (k + 1), sx(s0.center[1]), sy(s0.center[0]) - 26));
+    ctx.fillText('heater copper', sx(15.5), sy(3.2)); ctx.fillText('beam (5.08 mm)', sx(38), sy(5.6));
+  } else {
+    ctx.fillText('2 × 2512 heater', sx(15.24), sy(3.2)); ctx.fillText('heater supply traces', sx(7.5), sy(16.9));
+  }
+}
+
+buildParamTables();
+compute();
+const redraw = () => { drawBoard('topView', 'top'); drawBoard('botView', 'bottom'); drawSection(); drawNetwork(); };
+redraw();
+window.addEventListener('resize', redraw);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+</script>
+</body>
+</html>
